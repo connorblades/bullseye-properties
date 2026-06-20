@@ -47,6 +47,61 @@ export async function signInWithMagicLink(formData: FormData) {
 }
 
 /**
+ * Server Action: sign in with email + password.
+ *
+ * Primary sign-in path. Magic link remains as fallback for users who forget
+ * their password or who haven't set one yet (new partners pre-onboarding).
+ */
+export async function signInWithPassword(formData: FormData) {
+  const email = String(formData.get('email') ?? '').trim().toLowerCase();
+  const password = String(formData.get('password') ?? '');
+
+  if (!email || !email.includes('@')) {
+    redirect(`/login?error=${encodeURIComponent('Enter a valid email address.')}`);
+  }
+  if (!password) {
+    redirect(`/login?error=${encodeURIComponent('Enter your password.')}`);
+  }
+
+  const supabase = createSupabaseActionClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    // Generic message: don't leak whether the email exists.
+    redirect(`/login?error=${encodeURIComponent('Incorrect email or password.')}`);
+  }
+
+  redirect('/dashboard');
+}
+
+/**
+ * Server Action: set or change the signed-in user's password.
+ *
+ * Called from /account/password. New partners with no password set use this
+ * after their first magic-link sign-in. Requires an active session.
+ */
+export async function setPassword(formData: FormData) {
+  const password = String(formData.get('password') ?? '');
+  const confirm = String(formData.get('confirm') ?? '');
+
+  if (password.length < 8) {
+    redirect(`/account/password?error=${encodeURIComponent('Password must be at least 8 characters.')}`);
+  }
+  if (password !== confirm) {
+    redirect(`/account/password?error=${encodeURIComponent('Passwords do not match.')}`);
+  }
+
+  const supabase = createSupabaseActionClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    redirect(`/account/password?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect('/dashboard?password_set=1');
+}
+
+/**
  * Server Action: sign out the current user and redirect to /login.
  *
  * Fail-soft when Supabase env not set (M0 cloud provisioning pending):
