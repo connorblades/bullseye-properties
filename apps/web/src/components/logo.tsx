@@ -11,7 +11,7 @@ export function Logo({
   size?: 'sm' | 'md' | 'lg';
 }) {
   const src = variant === 'white' ? '/logo-white.png' : '/logo.png';
-  const heights = { sm: 28, md: 40, lg: 56 };
+  const heights = { sm: 28, md: 80, lg: 96 };
   const h = heights[size];
 
   return (

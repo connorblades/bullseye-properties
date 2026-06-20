@@ -10,7 +10,7 @@ export function Nav({
 }) {
   return (
     <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-black/[0.06]">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
         <Logo size="md" />
         <div className="flex items-center gap-6 text-sm">
           <Link href="/dashboard" className="text-ink-mid hover:text-navy font-semibold transition">Deals</Link>

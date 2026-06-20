@@ -8,7 +8,7 @@ import { defineConfig } from '@trigger.dev/sdk/v3';
  * every task inherits.
  */
 export default defineConfig({
-  project: 'TODO_TRIGGER_PROJECT_REF',  // overwritten by `trigger.dev init`
+  project: 'proj_hltfmqmgkuoihlowjxnt',
   dirs: ['./src/trigger'],
   retries: {
     enabledInDev: true,

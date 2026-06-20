@@ -27,7 +27,7 @@
     "postgres": "3.4.4",
     "@anthropic-ai/sdk": "0.30.1",
     "ai": "4.0.18",
-    "@trigger.dev/sdk": "3.1.2",
+    "@trigger.dev/sdk": "3.3.17",
     "@react-pdf/renderer": "4.0.0",
     "react-hook-form": "7.53.2",
     "@hookform/resolvers": "3.9.1",
