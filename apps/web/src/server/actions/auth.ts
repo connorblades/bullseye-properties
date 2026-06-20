@@ -51,6 +51,10 @@ export async function signInWithMagicLink(formData: FormData) {
  *
  * Primary sign-in path. Magic link remains as fallback for users who forget
  * their password or who haven't set one yet (new partners pre-onboarding).
+ *
+ * Signs out any existing session first so a failed attempt produces a visible
+ * error (rather than silently bouncing back to /dashboard via middleware,
+ * which sees a leftover session from a prior magic-link sign-in).
  */
 export async function signInWithPassword(formData: FormData) {
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
@@ -64,6 +68,11 @@ export async function signInWithPassword(formData: FormData) {
   }
 
   const supabase = createSupabaseActionClient();
+
+  // Clear any existing session so a wrong-password attempt actually fails
+  // closed rather than silently keeping the user signed in via the prior cookie.
+  await supabase.auth.signOut();
+
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
