@@ -1,0 +1,56 @@
+import { type NextRequest, NextResponse } from 'next/server';
+import { updateSession } from '@/server/auth/middleware';
+
+/**
+ * Middleware: refresh the auth session on every request and gate protected
+ * routes. Unauthenticated requests to gated routes redirect to /login.
+ *
+ * Reference: https://supabase.com/docs/guides/auth/server-side/nextjs
+ */
+export async function middleware(request: NextRequest) {
+  const { response, user } = await updateSession(request);
+
+  const path = request.nextUrl.pathname;
+  const isPublic =
+    path === '/' ||
+    path.startsWith('/login') ||
+    path.startsWith('/auth') ||
+    path.startsWith('/r/') ||  // investor share link viewer (token-gated separately)
+    path.startsWith('/_next') ||
+    path.startsWith('/api/public');
+
+  // Local dev fail-soft: when Supabase env vars are not yet set (M0 cloud
+  // provisioning still pending), don't gate routes — the wizard is reachable
+  // from localhost so M1 can be built and previewed before M0 is closed.
+  // Once NEXT_PUBLIC_SUPABASE_URL is present, full auth gating is restored.
+  const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+  if (supabaseConfigured && !user && !isPublic) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = '/login';
+    redirectUrl.searchParams.set('next', path);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (user && (path === '/login' || path === '/login/sent')) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = '/dashboard';
+    redirectUrl.search = '';
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  return response;
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for:
+     * - _next/static (static files)
+     * - _next/image (image optimisation)
+     * - favicon.ico, robots.txt, sitemap.xml
+     * - assets in /public served by the static handler
+     */
+    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:png|jpg|jpeg|gif|webp|svg|pdf)$).*)',
+  ],
+};

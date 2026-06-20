@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" width="240" height="80">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f5199"/>
+      <stop offset="100%" stop-color="#0d2a5e"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="240" height="80" rx="8" fill="url(#bg)"/>
+  <rect x="0" y="0" width="240" height="80" rx="8" fill="url(#ring)" opacity="0.4"/>
+
+  <!-- Bullseye target mark -->
+  <g transform="translate(20, 14)">
+    <circle cx="26" cy="26" r="25" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.6"/>
+    <circle cx="26" cy="26" r="18" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.8"/>
+    <circle cx="26" cy="26" r="10" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+    <circle cx="26" cy="26" r="4" fill="#ffffff"/>
+    <line x1="26" y1="2" x2="26" y2="14" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+    <line x1="26" y1="38" x2="26" y2="50" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+    <line x1="2" y1="26" x2="14" y2="26" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+    <line x1="38" y1="26" x2="50" y2="26" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+  </g>
+
+  <!-- Text -->
+  <text x="86" y="28" font-family="Inter, -apple-system, sans-serif" font-size="9" font-weight="700" fill="#ffffff" opacity="0.75" letter-spacing="1.2">ACCREDITED</text>
+  <text x="86" y="48" font-family="Inter, -apple-system, sans-serif" font-size="14" font-weight="900" fill="#ffffff" letter-spacing="-0.3">BULLSEYE</text>
+  <text x="86" y="63" font-family="Inter, -apple-system, sans-serif" font-size="9" font-weight="700" fill="#ffffff" opacity="0.75" letter-spacing="1.2">PARTNER</text>
+
+  <!-- Right edge tick -->
+  <circle cx="218" cy="40" r="11" fill="#10b981"/>
+  <path d="M213 40 L217 44 L223 36" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
