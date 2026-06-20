@@ -4,6 +4,38 @@ import { redirect } from 'next/navigation';
 import { createSupabaseActionClient } from '@/server/auth/server';
 
 /**
+ * Server Action: sign in with Google OAuth.
+ *
+ * Redirects the user to Google's OAuth consent screen. Google sends them
+ * to Supabase's callback URL, which then redirects to our /auth/callback
+ * with a `code` query param that we exchange for a session.
+ *
+ * For new partners onboarding via Google Workspace, this is the primary
+ * sign-in path — one click, no password required, no email round-trip.
+ */
+export async function signInWithGoogle() {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+
+  const supabase = createSupabaseActionClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${siteUrl}/auth/callback`,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
+  });
+
+  if (error || !data?.url) {
+    redirect(`/login?error=${encodeURIComponent('Google sign-in is unavailable right now.')}`);
+  }
+
+  redirect(data.url);
+}
+
+/**
  * Server Action: send a magic-link email to the supplied address.
  * Redirects to /login/sent on success or /login?error=... on failure.
  *
