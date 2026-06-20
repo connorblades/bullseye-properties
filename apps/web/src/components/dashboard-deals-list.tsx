@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FileText, Clock, CheckCircle2, RotateCcw } from 'lucide-react';
-import { listDeals, seedDemoDealsIfEmpty, deleteAll, type Deal } from '@/lib/deal-store';
+import { FileText, Clock, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
+import { listDeals, type Deal } from '@/lib/deal-store';
 import { SECTIONS } from '@/lib/sections';
 
 function dealStageTitle(d: Deal): string {
@@ -14,25 +14,43 @@ function dealStageTitle(d: Deal): string {
 
 export function DashboardDealsList() {
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setMounted(true);
-    seedDemoDealsIfEmpty();
-    setDeals(listDeals().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
+    let cancelled = false;
+    listDeals()
+      .then((rows) => {
+        if (cancelled) return;
+        setDeals(rows);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : 'Could not load your deals.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  if (!mounted) return null;
+  if (loading) {
+    return (
+      <div className="card p-10 text-center text-ink-muted">
+        <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+        <div className="text-sm">Loading your deals...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card p-6 bg-red-50 border-red-200 text-sm text-red-700">{error}</div>
+    );
+  }
 
   const active = deals.filter((d) => !d.delivered);
   const delivered = deals.filter((d) => d.delivered);
-
-  function handleReset() {
-    if (!window.confirm('Wipe all local deals and re-seed the demo data?\n\nThis cannot be undone.')) return;
-    deleteAll();
-    seedDemoDealsIfEmpty();
-    window.location.reload();
-  }
 
   return (
     <>
@@ -54,16 +72,6 @@ export function DashboardDealsList() {
         ))}
       </div>
 
-      <div className="flex items-center justify-end mb-4">
-        <button
-          onClick={handleReset}
-          className="inline-flex items-center gap-2 text-xs font-semibold text-ink-muted hover:text-red-500 border border-black/[0.08] rounded-lg px-3 py-2 transition"
-          title="Wipe local storage and re-seed demo data"
-        >
-          <RotateCcw size={14} /> Reset demo
-        </button>
-      </div>
-
       <div className="card overflow-hidden">
         <div className="px-6 py-4 border-b border-black/[0.06] flex items-center justify-between">
           <div className="font-bold text-ink">All deals</div>
@@ -71,10 +79,19 @@ export function DashboardDealsList() {
         </div>
         <div>
           {deals.length === 0 && (
-            <div className="px-6 py-10 text-center text-ink-muted text-sm">No deals yet. Start one above.</div>
+            <div className="px-6 py-10 text-center text-ink-muted text-sm space-y-3">
+              <div>No deals yet.</div>
+              <div>
+                Start a new one above, or{' '}
+                <Link href="/admin/seed" className="text-navy font-semibold inline-flex items-center gap-1">
+                  <Sparkles size={12} /> seed the Browning Street demo
+                </Link>{' '}
+                to see the wizard with realistic data.
+              </div>
+            </div>
           )}
           {deals.map((d) => {
-            const href = d.delivered ? `/deal/${d.id}/report` : `/deal/${d.id}/wizard/${d.progress}`;
+            const href = d.delivered ? `/dashboard` : `/deal/${d.id}/wizard/${d.progress}`;
             return (
               <Link
                 key={d.id}

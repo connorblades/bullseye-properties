@@ -74,7 +74,7 @@ export async function loadDeal(dealId: string) {
 type CreateDealInput = {
   address: string;
   source: Deal['source'];
-  inputs?: Record<string, unknown>;
+  initialInputs?: Partial<Deal>;
 };
 
 export async function createDeal(input: CreateDealInput) {
@@ -88,6 +88,8 @@ export async function createDeal(input: CreateDealInput) {
   const id = `d-${ulid()}`;
   const reference = buildReference(existingCount.length + 1);
 
+  const { jsonbInputs } = splitDealForStorage(input.initialInputs ?? {});
+
   await db.insert(deals).values({
     id,
     tenantId,
@@ -95,21 +97,70 @@ export async function createDeal(input: CreateDealInput) {
     address: input.address,
     source: input.source,
     currentStage: 2,
-    inputs: input.inputs ?? {},
+    inputs: jsonbInputs,
   });
 
   revalidatePath('/dashboard');
   return { id, reference };
 }
 
-export async function saveDealInputs(dealId: string, inputs: Record<string, unknown>, currentStage?: number) {
-  const { tenantId } = await requireTenant();
+/**
+ * Split a Deal patch into Postgres columns vs `inputs` jsonb.
+ * The wizard sends partial Deal objects with mixed top-level metadata and
+ * nested wizard data; this function routes each to the right destination.
+ */
+function splitDealForStorage(patch: Partial<Deal>): {
+  columns: Partial<{
+    address: string;
+    source: Deal['source'];
+    currentStage: number;
+    delivered: boolean;
+  }>;
+  jsonbInputs: Record<string, unknown>;
+} {
+  const columns: ReturnType<typeof splitDealForStorage>['columns'] = {};
+  const jsonbInputs: Record<string, unknown> = {};
 
-  const updateData: { inputs: Record<string, unknown>; updatedAt: Date; currentStage?: number } = {
-    inputs,
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    if (key === 'id' || key === 'createdAt') continue; // immutable identifiers
+    if (key === 'address') columns.address = value as string;
+    else if (key === 'source') columns.source = value as Deal['source'];
+    else if (key === 'progress') columns.currentStage = value as number;
+    else if (key === 'delivered') columns.delivered = value as boolean;
+    else jsonbInputs[key] = value;
+  }
+
+  return { columns, jsonbInputs };
+}
+
+/**
+ * Patch a deal. Accepts a partial Deal — top-level fields update their
+ * Postgres columns, anything else merges into the `inputs` jsonb.
+ *
+ * Wizard auto-save calls this on every (debounced) input change, sending
+ * the full current Deal object. The merge means partial updates from
+ * concurrent clients don't clobber each other's nested fields.
+ */
+export async function updateDealById(dealId: string, patch: Partial<Deal>) {
+  const { tenantId } = await requireTenant();
+  const { columns, jsonbInputs } = splitDealForStorage(patch);
+
+  const updateData: Record<string, unknown> = {
+    ...columns,
     updatedAt: new Date(),
   };
-  if (typeof currentStage === 'number') updateData.currentStage = currentStage;
+
+  // Only merge inputs if there's at least one nested field to update.
+  if (Object.keys(jsonbInputs).length > 0) {
+    const existing = await db
+      .select({ inputs: deals.inputs })
+      .from(deals)
+      .where(and(eq(deals.id, dealId), eq(deals.tenantId, tenantId)))
+      .limit(1);
+    const existingInputs = (existing[0]?.inputs as Record<string, unknown> | undefined) ?? {};
+    updateData.inputs = { ...existingInputs, ...jsonbInputs };
+  }
 
   await db
     .update(deals)

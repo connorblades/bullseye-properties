@@ -1,31 +1,45 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 import { Nav } from '@/components/nav';
 import { signOut } from '@/server/actions/auth';
-import { emptyDeal, newId, saveDeal, setStageProgress, type Deal } from '@/lib/deal-store';
+import { createDeal } from '@/server/actions/deals';
+import { type Deal } from '@/lib/deal-store';
 
 export default function NewDealPage() {
   const router = useRouter();
   const [address, setAddress] = useState('');
   const [client, setClient] = useState('James W. (London)');
   const [source, setSource] = useState<Deal['source']>('estate-agent');
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const id = newId();
-    const deal = emptyDeal(id, {
-      address,
-      client,
-      source,
-      auction: { isAuction: source === 'auction', buyerFees: '', specialConditions: '', restrictiveCovenants: '' },
+    setError(null);
+    startTransition(async () => {
+      try {
+        const { id } = await createDeal({
+          address,
+          source,
+          initialInputs: {
+            client,
+            auction: {
+              isAuction: source === 'auction',
+              buyerFees: '',
+              specialConditions: '',
+              restrictiveCovenants: '',
+            },
+          },
+        });
+        router.push(`/deal/${id}/wizard/2`);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not create deal. Please try again.');
+      }
     });
-    saveDeal(deal);
-    setStageProgress(id, 2);
-    router.push(`/deal/${id}/wizard/2`);
   }
 
   return (
@@ -98,8 +112,22 @@ export default function NewDealPage() {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary w-full justify-center">
-            Continue to Client Criteria <ArrowRight size={18} />
+          {error && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2" role="alert">
+              {error}
+            </div>
+          )}
+
+          <button type="submit" disabled={isPending} className="btn-primary w-full justify-center disabled:opacity-60">
+            {isPending ? (
+              <>
+                <Loader2 size={18} className="animate-spin" /> Creating deal...
+              </>
+            ) : (
+              <>
+                Continue to Client Criteria <ArrowRight size={18} />
+              </>
+            )}
           </button>
         </form>
       </main>

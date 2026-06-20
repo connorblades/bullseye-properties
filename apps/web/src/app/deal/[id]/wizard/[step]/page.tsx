@@ -9,12 +9,12 @@ import { AmenitiesEditor } from '@/components/amenities-editor';
 import { CrimeProfile } from '@/components/crime-profile';
 import { DocumentsUpload } from '@/components/documents-upload';
 import { signOut } from '@/server/actions/auth';
+import { updateDealById } from '@/server/actions/deals';
 import { SECTIONS } from '@/lib/sections';
 import { fmtMoney } from '@/lib/utils';
 import {
   useDeal,
   setStageProgress,
-  updateDeal,
   computeFinancials,
   computeGrowthProjection,
   type Deal,
@@ -52,9 +52,13 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
   }
 
   const goNext = () => {
-    setStageProgress(id, Math.min(total, step + 1));
-    if (step < total) router.push(`/deal/${id}/wizard/${step + 1}`);
-    else { updateDeal(id, { delivered: true }); router.push(`/dashboard`); }
+    if (step < total) {
+      setStageProgress(id, Math.min(total, step + 1));
+      router.push(`/deal/${id}/wizard/${step + 1}`);
+    } else {
+      updateDealById(id, { delivered: true, progress: total });
+      router.push(`/dashboard`);
+    }
   };
   const goBack = () => {
     if (step > 1) router.push(`/deal/${id}/wizard/${step - 1}`);
