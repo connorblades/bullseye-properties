@@ -27,10 +27,9 @@ import { fetchAmenities } from '@/server/public-data/amenities';
 import { fetchPricePaid } from '@/server/public-data/price-paid';
 import { fetchPlanning } from '@/server/public-data/planning';
 import { fetchPlanningApplications } from '@/server/public-data/planning-applications';
-import { fetchCouncilTax } from '@/server/public-data/council-tax';
 import { fetchEpc } from '@/server/public-data/epc';
 import { lookupCompany } from '@/server/public-data/companies';
-import { buildMapLayers, buildTitleBoundary } from '@/server/maps/static-maps';
+import { buildMapLayers, buildFloodMap, buildTitleBoundary } from '@/server/maps/static-maps';
 import type { VendorCompany } from '@/lib/deal-store';
 
 function status(v: unknown): PublicDataStatus {
@@ -88,7 +87,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, councilTax, epc] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, epc] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -97,7 +96,6 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchPricePaid(geo.postcode),
       fetchPlanning(geo.postcode, geo.lat, geo.lng),
       fetchPlanningApplications(geo.lat, geo.lng),
-      fetchCouncilTax(geo.postcode, address),
       fetchEpc(geo.postcode, address),
     ]);
 
@@ -117,12 +115,12 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   const baseMaps = buildMapLayers({
     lat: geo.lat,
     lng: geo.lng,
-    floodBand: flood?.band ?? null,
     amenities: amenities ?? [],
     crimeTotal: crime?.total12mo ?? 0,
   });
+  const floodMap = buildFloodMap(geo.lat, geo.lng);
   const titleBoundary = buildTitleBoundary(geo.lat, geo.lng);
-  const maps = { ...(baseMaps ?? {}), ...titleBoundary };
+  const maps = { ...(baseMaps ?? {}), ...floodMap, ...titleBoundary };
   const hasMaps = Object.keys(maps).length > 0;
 
   const statusMap: Partial<Record<PublicDataSourceKey, PublicDataStatus>> = {
@@ -135,7 +133,6 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     pricePaid: status(pricePaid),
     planning: status(planning),
     planningApplications: status(planningApplications),
-    councilTax: status(councilTax),
     epc: status(epc),
     maps: hasMaps ? 'ok' : 'unavailable',
   };
@@ -153,7 +150,6 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(pricePaid ? { pricePaid } : {}),
     ...(planning ? { planning } : {}),
     ...(planningApplications ? { planningApplications } : {}),
-    ...(councilTax ? { councilTax } : {}),
     ...(epc ? { epc } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,

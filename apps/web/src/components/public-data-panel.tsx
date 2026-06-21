@@ -188,15 +188,14 @@ export function PricePaidTable({ pp }: { pp: PricePaidInfo }) {
 }
 
 export function MapsRow({ maps }: { maps: NonNullable<PublicData['maps']> }) {
-  const layers: { key: keyof typeof maps; label: string }[] = [
+  const layers: { key: 'amenities' | 'crime'; label: string }[] = [
     { key: 'amenities', label: 'Amenities' },
-    { key: 'flood', label: 'Flood (aerial)' },
     { key: 'crime', label: 'Crime catchment' },
   ];
   const present = layers.filter((l) => maps[l.key]);
   if (present.length === 0) return null;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {present.map((l) => (
         <div key={l.key} className="bg-bg rounded-lg overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -207,6 +206,39 @@ export function MapsRow({ maps }: { maps: NonNullable<PublicData['maps']> }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** A government WMS overlay stacked over a Mapbox aerial base for the same bbox. */
+function StackedMap({
+  base, overlay, label, icon,
+}: { base?: string; overlay?: string; label: string; icon: React.ReactNode }) {
+  if (!overlay) return null;
+  return (
+    <div className="bg-bg rounded-lg overflow-hidden">
+      <div className="relative w-full" style={{ aspectRatio: '1 / 1', maxHeight: 320 }}>
+        {base && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={base} alt={`${label} base`} className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={overlay} alt={label} className="absolute inset-0 w-full h-full object-cover" />
+      </div>
+      <div className="px-3 py-2 text-xs font-bold text-ink-mid uppercase tracking-wider flex items-center gap-1.5">
+        {icon} {label}
+      </div>
+    </div>
+  );
+}
+
+export function FloodAreaMap({ maps }: { maps: MapLayers }) {
+  return (
+    <StackedMap
+      base={maps.floodBase}
+      overlay={maps.floodOverlay}
+      label="Flood risk area (EA Flood Zones 2 & 3)"
+      icon={<Droplets size={12} />}
+    />
   );
 }
 
@@ -253,21 +285,13 @@ export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[]
 }
 
 export function TitleBoundaryMap({ maps }: { maps: MapLayers }) {
-  if (!maps.titleBoundaryOverlay) return null;
   return (
-    <div className="bg-bg rounded-lg overflow-hidden">
-      <div className="relative w-full" style={{ aspectRatio: '1 / 1', maxHeight: 320 }}>
-        {maps.titleBoundaryBase && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={maps.titleBoundaryBase} alt="Aerial base" className="absolute inset-0 w-full h-full object-cover" />
-        )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={maps.titleBoundaryOverlay} alt="HM Land Registry title boundaries" className="absolute inset-0 w-full h-full object-cover" />
-      </div>
-      <div className="px-3 py-2 text-xs font-bold text-ink-mid uppercase tracking-wider flex items-center gap-1.5">
-        <MapIcon size={12} /> Title boundaries (HM Land Registry INSPIRE)
-      </div>
-    </div>
+    <StackedMap
+      base={maps.titleBoundaryBase}
+      overlay={maps.titleBoundaryOverlay}
+      label="Title boundaries (HM Land Registry INSPIRE)"
+      icon={<MapIcon size={12} />}
+    />
   );
 }
 
@@ -280,15 +304,15 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
     <div className="space-y-4">
       <SourceStatusGrid data={data} />
       {data.maps && <MapsRow maps={data.maps} />}
-      {data.maps?.titleBoundaryOverlay && (
+      {data.maps && (data.maps.floodOverlay || data.maps.titleBoundaryOverlay) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <TitleBoundaryMap maps={data.maps} />
+          {data.maps.floodOverlay && <FloodAreaMap maps={data.maps} />}
+          {data.maps.titleBoundaryOverlay && <TitleBoundaryMap maps={data.maps} />}
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {data.flood && <FloodCard flood={data.flood} />}
         {data.epc && <EpcCard epc={data.epc} />}
-        {data.councilTax && <CouncilTaxCard ct={data.councilTax} />}
         {data.hpi && <HpiCard hpi={data.hpi} />}
         {data.demographics && <DemographicsCard d={data.demographics} />}
         {data.planning && <PlanningCard planning={data.planning} />}

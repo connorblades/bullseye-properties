@@ -72,7 +72,6 @@ function url(style: string, overlays: string[], lat: number, lng: number, zoom: 
 export type MapInputs = {
   lat: number;
   lng: number;
-  floodBand: 1 | 2 | 3 | null;
   amenities: Amenity[];
   crimeTotal: number;
 };
@@ -89,10 +88,8 @@ export function buildMapLayers(input: MapInputs): MapLayers | undefined {
     .map((a) => `pin-s+${PIN_COLOUR[a.category]}(${a.lng},${a.lat})`);
   const amenitiesUrl = url('streets-v12', [...amenityPins, propertyPin(lat, lng)], lat, lng, 13, t);
 
-  // Flood: aerial + property pin. Zoom a touch tighter on the plot.
-  const floodUrl = url('satellite-streets-v12', [propertyPin(lat, lng)], lat, lng, 14, t);
-
   // Crime: streets + ~1-mile catchment circle tinted by volume + property pin.
+  // (A true red/amber/green heat map is rendered client-side from crime points.)
   const intensity = crimeTotal > 1500 ? 'd0021b' : crimeTotal > 600 ? 'e8590c' : 'f5a623';
   const crimeUrl = url(
     'streets-v12',
@@ -103,7 +100,42 @@ export function buildMapLayers(input: MapInputs): MapLayers | undefined {
     t,
   );
 
-  return { amenities: amenitiesUrl, flood: floodUrl, crime: crimeUrl };
+  return { amenities: amenitiesUrl, crime: crimeUrl };
+}
+
+// EA Flood Map for Planning (Rivers and Sea) flood-zone WMS. No token needed.
+const EA_FLOOD_WMS =
+  'https://environment.data.gov.uk/spatialdata/flood-map-for-planning-flood-zones/wms';
+
+/** Square-in-degrees bbox + matching base/overlay sizes, ~radiusDeg each side. */
+function bboxBaseOverlay(
+  lat: number,
+  lng: number,
+  radiusDeg: number,
+  wmsBase: string,
+  wmsLayer: string,
+): { base?: string; overlay: string } {
+  const minLat = (lat - radiusDeg).toFixed(6);
+  const maxLat = (lat + radiusDeg).toFixed(6);
+  const minLng = (lng - radiusDeg).toFixed(6);
+  const maxLng = (lng + radiusDeg).toFixed(6);
+  const px = 600;
+  const overlay =
+    `${wmsBase}?service=WMS&version=1.3.0&request=GetMap` +
+    `&layers=${wmsLayer}&styles=&crs=EPSG:4326` +
+    `&bbox=${minLat},${minLng},${maxLat},${maxLng}` +
+    `&width=${px}&height=${px}&format=image/png&transparent=true`;
+  const t = token();
+  const base = t
+    ? `${BASE}/satellite-v9/static/${propertyPin(lat, lng)}/[${minLng},${minLat},${maxLng},${maxLat}]/${px}x${px}?access_token=${t}`
+    : undefined;
+  return { overlay, ...(base ? { base } : {}) };
+}
+
+/** Flood map: aerial base + EA flood-zone polygons shaded for the risk area. */
+export function buildFloodMap(lat: number, lng: number): Partial<MapLayers> {
+  const { base, overlay } = bboxBaseOverlay(lat, lng, 0.005, EA_FLOOD_WMS, 'Flood_Zones_2_3_Rivers_and_Sea');
+  return { floodOverlay: overlay, ...(base ? { floodBase: base } : {}) };
 }
 
 // HMLR INSPIRE cadastral-parcel (title boundary) WMS. No token needed.
@@ -122,24 +154,6 @@ const HMLR_WMS = 'https://inspire.landregistry.gov.uk/inspire/ows';
  * this is the visual boundary, per the agreed scope.)
  */
 export function buildTitleBoundary(lat: number, lng: number): Partial<MapLayers> {
-  const delta = 0.0012; // ~square degree box, ~130m
-  const minLat = (lat - delta).toFixed(6);
-  const maxLat = (lat + delta).toFixed(6);
-  const minLng = (lng - delta).toFixed(6);
-  const maxLng = (lng + delta).toFixed(6);
-  const px = 600;
-
-  // WMS 1.3.0 + EPSG:4326 uses lat,lng axis order.
-  const overlay =
-    `${HMLR_WMS}?service=WMS&version=1.3.0&request=GetMap` +
-    `&layers=inspire:CP.CadastralParcel&styles=&crs=EPSG:4326` +
-    `&bbox=${minLat},${minLng},${maxLat},${maxLng}` +
-    `&width=${px}&height=${px}&format=image/png&transparent=true`;
-
-  const t = token();
-  const base = t
-    ? `${BASE}/satellite-v9/static/[${minLng},${minLat},${maxLng},${maxLat}]/${px}x${px}?access_token=${t}`
-    : undefined;
-
+  const { base, overlay } = bboxBaseOverlay(lat, lng, 0.0012, HMLR_WMS, 'inspire:CP.CadastralParcel');
   return { titleBoundaryOverlay: overlay, ...(base ? { titleBoundaryBase: base } : {}) };
 }

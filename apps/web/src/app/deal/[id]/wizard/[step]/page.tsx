@@ -9,9 +9,10 @@ import { AmenitiesEditor } from '@/components/amenities-editor';
 import { CrimeProfile } from '@/components/crime-profile';
 import { DocumentsUpload } from '@/components/documents-upload';
 import {
-  PublicDataPanel, FloodCard, EpcCard, CouncilTaxCard,
+  PublicDataPanel, FloodCard, EpcCard,
   DemographicsCard, PlanningCard,
 } from '@/components/public-data-panel';
+import { Receipt, ExternalLink } from 'lucide-react';
 import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
@@ -458,10 +459,11 @@ function DueDiligencePanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
           {pd.flood && <FloodCard flood={pd.flood} />}
           {pd.planning && <PlanningCard planning={pd.planning} />}
           {pd.epc && <EpcCard epc={pd.epc} />}
-          {pd.councilTax && <CouncilTaxCard ct={pd.councilTax} />}
           {pd.demographics && <DemographicsCard d={pd.demographics} />}
         </div>
       )}
+
+      <CouncilTaxManual deal={deal} update={update} />
 
       <div className="card p-6">
         <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-1">Vendor company check (Companies House)</div>
@@ -469,6 +471,45 @@ function DueDiligencePanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
           For auction or direct-to-vendor deals where the seller is a company: status, officers, charges and insolvency.
         </div>
         <VendorCompanyLookup dealId={deal.id} company={deal.vendorCompany} onResult={setVendor} />
+      </div>
+    </div>
+  );
+}
+
+function CouncilTaxManual({ deal, update }: { deal: Deal; update: UpdateFn }) {
+  // VOA has no API and actively blocks scraping, so the band is entered by hand.
+  // Deep-link the VOA "Check your Council Tax band" service for the postcode.
+  const voaUrl = 'https://www.tax.service.gov.uk/check-council-tax-band/search';
+  const bands = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  return (
+    <div className="card p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Receipt size={15} className="text-navy" />
+        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">Council Tax band</div>
+      </div>
+      <div className="text-xs text-ink-muted mb-4">
+        Entered manually - the VOA publishes no API. Look it up for {deal.postcode || 'this postcode'} and select below.
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <select
+          value={deal.councilTaxBand ?? ''}
+          onChange={(e) => update({ councilTaxBand: e.target.value })}
+          className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30"
+        >
+          <option value="">Select band</option>
+          {bands.map((b) => <option key={b} value={b}>Band {b}</option>)}
+        </select>
+        <a
+          href={voaUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-secondary text-xs inline-flex items-center gap-1.5"
+        >
+          Look up on VOA <ExternalLink size={13} />
+        </a>
+        {deal.councilTaxBand && (
+          <span className="text-sm font-black text-ink">Band {deal.councilTaxBand}</span>
+        )}
       </div>
     </div>
   );

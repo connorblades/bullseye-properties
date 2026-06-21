@@ -97,10 +97,11 @@ export type HpiInfo = {
 
 export type MapLayers = {
   amenities?: string;         // Mapbox static image URL
-  flood?: string;
   crime?: string;
-  // Title boundary is a composite: a Mapbox aerial base + an HMLR INSPIRE
-  // boundary overlay (transparent PNG) for the same bbox, stacked in the UI.
+  // Flood + title boundary are composites: a Mapbox aerial base + a government
+  // WMS overlay (transparent PNG) for the same bbox, stacked in the UI.
+  floodBase?: string;
+  floodOverlay?: string;      // EA flood-zone polygons (shaded risk area)
   titleBoundaryBase?: string;
   titleBoundaryOverlay?: string;
 };
@@ -246,6 +247,7 @@ export type Deal = {
 
   publicData?: PublicData;
   vendorCompany?: VendorCompany;
+  councilTaxBand?: string;   // manual - VOA has no API (see council-tax UI + link)
 
   criteria: {
     budget: string;
