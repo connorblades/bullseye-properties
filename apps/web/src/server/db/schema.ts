@@ -239,8 +239,29 @@ export const aiCostLedger = pgTable(
   })
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Public data cache (M2) - shared, tenant-agnostic key/value cache for all
+// public-data integrations. TTL carried per-row in expiresAt. Server-only:
+// RLS is on with no policies; the direct connection bypasses it.
+// ─────────────────────────────────────────────────────────────────────────────
+export const publicDataCache = pgTable(
+  'public_data_cache',
+  {
+    cacheKey: text('cache_key').primaryKey(),
+    source: text('source').notNull(),
+    payload: jsonb('payload').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    sourceIdx: index('public_data_cache_source_idx').on(table.source),
+    expiresIdx: index('public_data_cache_expires_idx').on(table.expiresAt),
+  })
+);
+
 // Inferred types for application code
 export type Tenant = typeof tenants.$inferSelect;
+export type PublicDataCacheRow = typeof publicDataCache.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type Membership = typeof memberships.$inferSelect;
 export type Deal = typeof deals.$inferSelect;

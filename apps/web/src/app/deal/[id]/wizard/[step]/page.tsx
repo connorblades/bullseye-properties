@@ -2,14 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import { WizardShell } from '@/components/wizard-shell';
 import { ImageUpload, ImageGallery } from '@/components/image-upload';
 import { AmenitiesEditor } from '@/components/amenities-editor';
 import { CrimeProfile } from '@/components/crime-profile';
 import { DocumentsUpload } from '@/components/documents-upload';
+import {
+  PublicDataPanel, FloodCard, EpcCard, CouncilTaxCard,
+  DemographicsCard, PlanningCard,
+} from '@/components/public-data-panel';
+import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
+import { pullPublicData } from '@/server/actions/public-data';
 import { SECTIONS } from '@/lib/sections';
 import { fmtMoney } from '@/lib/utils';
 import {
@@ -17,6 +23,9 @@ import {
   setStageProgress,
   computeFinancials,
   computeGrowthProjection,
+  parseSoldMonth,
+  parseMoney,
+  hpiAdjustValue,
   type Deal,
   type StageRating,
   type Comp,
@@ -25,6 +34,7 @@ import {
   type MortgageType,
   type Amenity,
   type PropertyDocument,
+  type VendorCompany,
 } from '@/lib/deal-store';
 
 export default function WizardStepPage({ params }: { params: { id: string; step: string } }) {
@@ -74,7 +84,7 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
       {step === 6 && <CompsPanel kind="rental" deal={deal} update={update} />}
       {step === 7 && <AuctionPanel deal={deal} update={update} />}
       {step === 8 && <ViewingPanel deal={deal} update={update} />}
-      {step === 9 && <DueDiligencePanel deal={deal} />}
+      {step === 9 && <DueDiligencePanel deal={deal} update={update} />}
       {step === 10 && <GrowthDriversPanel deal={deal} update={update} />}
       {step === 11 && <RefurbPanel deal={deal} update={update} />}
       {step === 12 && <FinancialsPanel deal={deal} update={update} />}
@@ -130,18 +140,25 @@ function CriteriaForm({ deal, update }: { deal: Deal; update: UpdateFn }) {
 }
 
 function AutoPullPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
-  const data: [string, string][] = [
-    ['UPRN',                                       '100012345678'],
-    ['Title number',                               'NT' + deal.id.toUpperCase().slice(-6)],
-    ['Tenure',                                     'Freehold'],
-    ['EPC current',                                'D (62)'],
-    ['EPC potential',                              'C (74)'],
-    ['Council tax band',                           'A'],
-    ['Flood risk',                                 'Very Low'],
-    ['Last sold',                                  '£82,000 (2014)'],
-    ['Comparable street median (Land Registry)',   '£135,000'],
-    ['Crime per 1,000',                            '34.2 (district avg 38.1)'],
-  ];
+  const [pulling, setPulling] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const runPull = async () => {
+    setPulling(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await pullPublicData(deal.id);
+      if (res.applied) update(res.applied);
+      if (res.ok) setMessage(res.message);
+      else setError(res.message);
+    } catch {
+      setError('Pull failed. Check the address has a valid UK postcode and try again.');
+    } finally {
+      setPulling(false);
+    }
+  };
 
   const setMap = (img: string | undefined) => update({ location: { ...deal.location, mapImage: img } });
   const setContext = (i: number, img: string | undefined) => {
@@ -154,31 +171,51 @@ function AutoPullPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   };
   const setAmenities = (amenities: Amenity[]) => update({ location: { ...deal.location, amenities } });
 
+  const pulled = Boolean(deal.publicData);
+
   return (
     <div className="space-y-4">
       <div className="card p-8">
-        <div className="flex items-center gap-2 mb-5">
-          <Sparkles size={16} className="text-navy" />
-          <div className="text-xs font-bold text-navy uppercase tracking-wider">Auto-pulled from public sources</div>
+        <div className="flex items-center justify-between gap-4 mb-5">
+          <div className="flex items-center gap-2">
+            <Database size={16} className="text-navy" />
+            <div className="text-xs font-bold text-navy uppercase tracking-wider">Live public data</div>
+          </div>
+          <button onClick={runPull} disabled={pulling} className="btn-primary text-sm disabled:opacity-60">
+            {pulling ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {pulled ? 'Re-pull live data' : 'Pull live data'}
+          </button>
         </div>
-        <div className="text-sm text-ink-mid mb-5">For {deal.address || '(no address)'}</div>
-        <div className="grid md:grid-cols-2 gap-3 mb-6">
-          {data.map(([k, v]) => (
-            <div key={k} className="flex items-center justify-between bg-bg rounded-lg px-4 py-3">
-              <div className="text-xs text-ink-mid font-semibold uppercase tracking-wider">{k}</div>
-              <div className="text-sm font-bold text-ink">{v}</div>
-            </div>
-          ))}
+        <div className="text-sm text-ink-mid mb-4">
+          For {deal.address || '(no address)'}
+          {deal.postcode ? ` · ${deal.postcode}` : ''}
         </div>
-        <div className="bg-success-light/40 border border-success/20 rounded-lg p-4 text-sm text-success-dark">
-          <strong>10 fields prefilled from public sources.</strong> Review and correct anything wrong on the next stage. M2 wires these to live data.gov.uk, EPC register, and data.police.uk feeds.
-        </div>
+
+        {message && (
+          <div className="bg-success-light/40 border border-success/20 rounded-lg p-3 text-sm text-success-dark mb-4">
+            {message}
+          </div>
+        )}
+        {error && (
+          <div className="flex items-start gap-2 bg-amber/10 border border-amber/20 rounded-lg p-3 text-sm text-amber mb-4">
+            <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" /> {error}
+          </div>
+        )}
+
+        {pulled ? (
+          <PublicDataPanel deal={deal} />
+        ) : (
+          <div className="text-sm text-ink-muted bg-bg rounded-lg p-6 text-center">
+            No data pulled yet. Pulls HPI, crime, flood, amenities, EPC, council tax, planning,
+            Land Registry sold prices and deprivation from public sources. Each is fail-soft.
+          </div>
+        )}
       </div>
 
       <div className="card p-6">
         <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-3">Area map</div>
         <ImageUpload value={deal.location.mapImage} onChange={setMap} label="Upload area map" height="180px" />
-        <div className="text-xs text-ink-muted mt-2">Drop a screenshot from Google Maps or a borough map. M2 replaces this with a Mapbox static render.</div>
+        <div className="text-xs text-ink-muted mt-2">Optional manual override. Live pull renders Mapbox amenity, flood and crime maps above.</div>
       </div>
 
       <div className="card p-6">
@@ -229,6 +266,7 @@ function PropertyForm({ deal, update }: { deal: Deal; update: UpdateFn }) {
 function CompsPanel({ kind, deal, update }: { kind: 'sales' | 'rental'; deal: Deal; update: UpdateFn }) {
   const list = kind === 'sales' ? deal.salesComps : deal.rentalComps;
   const key = kind === 'sales' ? 'salesComps' : 'rentalComps';
+  const hpi = kind === 'sales' ? deal.publicData?.hpi : undefined;
 
   const add = () => {
     const item: Comp = { id: 'c-' + Math.random().toString(36).slice(2, 8), address: '', detail: '', value: '' };
@@ -254,19 +292,34 @@ function CompsPanel({ kind, deal, update }: { kind: 'sales' | 'rental'; deal: De
         <div className="card p-10 text-center text-ink-muted text-sm">No comparables yet. Add at least 3 to continue.</div>
       )}
 
-      {list.map((c, i) => (
-        <div key={c.id} className="card p-5">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-lg bg-navy/[0.08] text-navy font-black flex items-center justify-center flex-shrink-0">{i + 1}</div>
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input value={c.address} onChange={(e) => setRow(c.id, { address: e.target.value })} placeholder="Address" className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
-              <input value={c.detail} onChange={(e) => setRow(c.id, { detail: e.target.value })} placeholder={kind === 'sales' ? 'e.g. Sold 2025-08, 740 sqft' : 'e.g. Listed 2025-09, 2-bed'} className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
-              <input value={c.value} onChange={(e) => setRow(c.id, { value: e.target.value })} placeholder={kind === 'sales' ? '£128,000' : '£795 / month'} className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+      {list.map((c, i) => {
+        const soldMonth = hpi ? parseSoldMonth(c.detail) : null;
+        const soldPrice = hpi ? parseMoney(c.value) : null;
+        const adj = hpi && soldMonth && soldPrice ? hpiAdjustValue(soldPrice, soldMonth, hpi) : null;
+        return (
+          <div key={c.id} className="card p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-lg bg-navy/[0.08] text-navy font-black flex items-center justify-center flex-shrink-0">{i + 1}</div>
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input value={c.address} onChange={(e) => setRow(c.id, { address: e.target.value })} placeholder="Address" className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+                <input value={c.detail} onChange={(e) => setRow(c.id, { detail: e.target.value })} placeholder={kind === 'sales' ? 'e.g. Sold 2025-08, 740 sqft' : 'e.g. Listed 2025-09, 2-bed'} className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+                <input value={c.value} onChange={(e) => setRow(c.id, { value: e.target.value })} placeholder={kind === 'sales' ? '£128,000' : '£795 / month'} className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+              </div>
+              <button onClick={() => remove(c.id)} className="text-ink-muted hover:text-red-500 transition" aria-label="Remove"><X size={18} /></button>
             </div>
-            <button onClick={() => remove(c.id)} className="text-ink-muted hover:text-red-500 transition" aria-label="Remove"><X size={18} /></button>
+            {adj && (
+              <div className="mt-3 ml-14 flex items-center gap-2 text-xs">
+                <TrendingUp size={13} className="text-navy" />
+                <span className="text-ink-mid">
+                  HPI-adjusted to {hpi!.latestMonth}:{' '}
+                  <span className="font-bold text-navy">{fmtMoney(adj.adjusted)}</span>
+                  <span className="text-ink-muted"> (&times;{adj.ratio.toFixed(3)} on {soldMonth})</span>
+                </span>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <button onClick={add} className="w-full border-2 border-dashed border-black/[0.08] rounded-2xl py-4 text-sm font-bold text-ink-muted hover:border-navy/30 hover:text-navy transition flex items-center justify-center gap-2">
         <Plus size={16} /> Add comparable {list.length + 1}
@@ -379,32 +432,43 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   );
 }
 
-function DueDiligencePanel({ deal }: { deal: Deal }) {
-  const checks = [
-    'Crime rates', 'Flood risk', 'EPC current and potential', 'Street Checker',
-    'Local planning', 'Title and tenure', 'Council tax', 'Deprivation index',
-    'Local development plans', 'Schools and transport', 'Demographics', 'Rental demand signal',
-  ];
+function DueDiligencePanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
+  const pd = deal.publicData;
+  const setVendor = (vendorCompany: VendorCompany) => update({ vendorCompany });
+
   return (
     <div className="space-y-4">
-      <div className="card p-5 bg-success-light/40 border-success/20">
-        <div className="text-xs font-bold text-success-dark uppercase tracking-wider mb-1">All checks complete</div>
-        <div className="text-sm text-ink-mid">12 of 12 checks ran automatically against public data sources. 1 amber flag (planning).</div>
-      </div>
+      {!pd && (
+        <div className="card p-5 bg-amber/5 border-amber/20 flex items-start gap-2">
+          <AlertTriangle size={16} className="text-amber mt-0.5" />
+          <div className="text-sm text-ink-mid">
+            No live data pulled yet. Go back to <strong>Auto-Pull and Location</strong> and pull live data
+            to populate flood, crime, planning, EPC, council tax and deprivation here.
+          </div>
+        </div>
+      )}
+
       <div className="card p-6">
         <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-4">Crime profile</div>
         <CrimeProfile stats={deal.location.crime} />
       </div>
-      <div>
-        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-3">All 12 checks</div>
-        <div className="grid grid-cols-2 gap-3">
-          {checks.map((c) => (
-            <div key={c} className="card p-4 flex items-center justify-between">
-              <div className="text-sm font-semibold text-ink">{c}</div>
-              <span className="text-xs font-bold text-success bg-success-light px-2 py-1 rounded">Auto</span>
-            </div>
-          ))}
+
+      {pd && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {pd.flood && <FloodCard flood={pd.flood} />}
+          {pd.planning && <PlanningCard planning={pd.planning} />}
+          {pd.epc && <EpcCard epc={pd.epc} />}
+          {pd.councilTax && <CouncilTaxCard ct={pd.councilTax} />}
+          {pd.demographics && <DemographicsCard d={pd.demographics} />}
         </div>
+      )}
+
+      <div className="card p-6">
+        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-1">Vendor company check (Companies House)</div>
+        <div className="text-xs text-ink-muted mb-4">
+          For auction or direct-to-vendor deals where the seller is a company: status, officers, charges and insolvency.
+        </div>
+        <VendorCompanyLookup dealId={deal.id} company={deal.vendorCompany} onResult={setVendor} />
       </div>
     </div>
   );
@@ -569,6 +633,15 @@ function FinancialsPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
 
       <div className="card p-8 space-y-5">
         <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">Growth and mortgage assumptions</div>
+        {deal.publicData?.hpi && (
+          <div className="flex items-center gap-2 text-xs text-navy bg-navy/[0.04] border border-navy/15 rounded-lg px-3 py-2">
+            <TrendingUp size={14} />
+            <span>
+              Default capital growth seeded from {deal.publicData.hpi.district} HPI:{' '}
+              <strong>{deal.publicData.hpi.cagr10yrPct.toFixed(1)}% pa</strong> (10yr), weighted for flood/deprivation. Edit freely.
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Capital growth pa (%)"   value={deal.growth.capitalGrowthPct} onChange={(v) => setG({ capitalGrowthPct: v })} placeholder="3.0" />
           <Field label="Rental growth pa (%)"    value={deal.growth.rentalGrowthPct}  onChange={(v) => setG({ rentalGrowthPct: v })}  placeholder="2.0" />

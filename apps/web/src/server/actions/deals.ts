@@ -112,6 +112,7 @@ export async function createDeal(input: CreateDealInput) {
 function splitDealForStorage(patch: Partial<Deal>): {
   columns: Partial<{
     address: string;
+    postcode: string;
     source: Deal['source'];
     currentStage: number;
     delivered: boolean;
@@ -125,6 +126,7 @@ function splitDealForStorage(patch: Partial<Deal>): {
     if (value === undefined) continue;
     if (key === 'id' || key === 'createdAt') continue; // immutable identifiers
     if (key === 'address') columns.address = value as string;
+    else if (key === 'postcode') columns.postcode = value as string;
     else if (key === 'source') columns.source = value as Deal['source'];
     else if (key === 'progress') columns.currentStage = value as number;
     else if (key === 'delivered') columns.delivered = value as boolean;

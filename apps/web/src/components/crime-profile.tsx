@@ -28,12 +28,12 @@ export function CrimeProfile({ stats }: { stats?: CrimeStats }) {
           <div className="text-xs text-ink-mid mt-1">incidents</div>
         </div>
         <div className="bg-bg rounded-lg p-4">
-          <div className="text-xs text-ink-muted font-semibold uppercase tracking-wider mb-1">Per 1,000 population</div>
+          <div className="text-xs text-ink-muted font-semibold uppercase tracking-wider mb-1">Avg / month</div>
           <div className="text-2xl font-black text-ink">{stats.per1000}</div>
-          <div className="text-xs text-ink-mid mt-1">District avg {stats.districtAvg}</div>
+          <div className="text-xs text-ink-mid mt-1">Latest month {stats.districtAvg}</div>
         </div>
         <div className={`rounded-lg p-4 border ${tone.c}`}>
-          <div className="text-xs font-semibold uppercase tracking-wider mb-1 opacity-80">vs district</div>
+          <div className="text-xs font-semibold uppercase tracking-wider mb-1 opacity-80">Latest vs avg</div>
           <div className="text-base font-black flex items-center gap-2">
             <Icon size={18} />
             {stats.comparisonPct}
@@ -60,7 +60,7 @@ export function CrimeProfile({ stats }: { stats?: CrimeStats }) {
       </div>
 
       <div className="text-xs text-ink-muted italic">
-        Source: data.police.uk - 12-month rolling window. Heatmap overlay shipped in M2.
+        Source: data.police.uk - street-level crime within ~1 mile, 12-month rolling window.
       </div>
     </div>
   );

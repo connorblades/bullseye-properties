@@ -55,6 +55,8 @@ export type Amenity = {
   distanceText: string;
   travelMinutes: number;
   mode: TravelMode;
+  lat?: number;   // populated by the live Overpass pull; used for map pins
+  lng?: number;
 };
 
 export type CrimeStats = {
@@ -64,6 +66,144 @@ export type CrimeStats = {
   comparison: 'lower' | 'similar' | 'higher';
   comparisonPct: string;
   breakdown: { category: string; count: number }[];
+};
+
+// ─── M2 public-data shapes ──────────────────────────────────────────────────
+// Populated by the pullPublicData server action. Crime and amenities continue
+// to live under `location` (the existing components read them there); the rest
+// nests under `publicData` alongside per-source fetch status for fail-soft UI.
+
+export type PublicDataStatus = 'ok' | 'fallback' | 'unavailable' | 'pending';
+
+export type FloodInfo = {
+  band: 1 | 2 | 3 | null;     // EA Flood Map for Planning zone (1 low … 3 high)
+  riskLabel: string;          // e.g. "Flood Zone 3 - High risk"
+  riversAndSea: string;       // descriptive risk-from-rivers-and-sea
+  surfaceWater: string;       // descriptive surface-water risk
+  hasActiveWarning: boolean;  // any live EA flood warning/alert covering the point
+  source: string;
+};
+
+export type HpiPoint = { month: string; index: number }; // month = YYYY-MM
+export type HpiInfo = {
+  district: string;
+  districtCode: string;
+  latestMonth: string;        // YYYY-MM
+  latestIndex: number;
+  latestAvgPrice: number;
+  cagr10yrPct: number;        // 10-year compound annual growth, %
+  series: HpiPoint[];         // monthly index, ascending by month
+};
+
+export type MapLayers = {
+  amenities?: string;         // Mapbox static image URL
+  flood?: string;
+  crime?: string;
+};
+
+// Census/deprivation context, lifted from postcodes.io (free, no extra call).
+export type Demographics = {
+  imdRank?: number;           // 1 = most deprived of 32,844 LSOAs
+  imdDecile?: number;         // 1 (most deprived) .. 10 (least)
+  lsoa?: string;
+  ward?: string;
+  constituency?: string;
+  adminCounty?: string;
+  parish?: string;
+  region?: string;
+};
+
+// Land Registry Price Paid - actual recorded sales for the postcode.
+export type PricePaidTxn = {
+  date: string;               // YYYY-MM-DD
+  price: number;
+  paon: string;               // primary addressable object (house no./name)
+  street: string;
+  postcode: string;
+  propertyType: string;       // Detached | Semi | Terraced | Flat | Other
+  newBuild: boolean;
+  tenure: string;             // Freehold | Leasehold
+};
+export type PricePaidInfo = {
+  postcode: string;
+  transactions: PricePaidTxn[];   // newest first
+};
+
+// planning.data.gov.uk point designations.
+export type PlanningDesignation = {
+  dataset: string;            // 'conservation-area' | 'listed-building' | ...
+  name: string;
+  reference?: string;
+};
+export type PlanningInfo = {
+  designations: PlanningDesignation[];
+  conservationArea: boolean;
+  listed: boolean;
+};
+
+// VOA council tax band (scraped, fail-soft).
+export type CouncilTaxInfo = {
+  band: string | null;        // A..H
+  source: string;
+};
+
+// EPC register (keyed).
+export type EpcInfo = {
+  currentRating: string;      // A..G
+  currentScore: number;
+  potentialRating: string;
+  potentialScore: number;
+  floorAreaM2?: number;
+  propertyType?: string;
+  builtForm?: string;
+  ageBand?: string;
+  mainHeating?: string;
+  lodgementDate?: string;
+  address?: string;
+};
+
+// Companies House - on-demand vendor lookup (not postcode-keyed), stored on the
+// deal separately from the postcode auto-pull. See `Deal.vendorCompany`.
+export type CompanyOfficer = {
+  name: string;
+  role: string;
+  appointedOn?: string;
+  resignedOn?: string;
+};
+export type VendorCompany = {
+  companyNumber: string;
+  companyName: string;
+  status: string;             // active | dissolved | liquidation | ...
+  type?: string;
+  incorporatedOn?: string;
+  registeredOffice?: string;
+  sicCodes?: string[];
+  officers: CompanyOfficer[];
+  chargesCount?: number;
+  hasInsolvency?: boolean;
+  fetchedAt?: string;
+};
+
+export type PublicDataSourceKey =
+  | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
+  | 'amenities' | 'pricePaid' | 'planning' | 'councilTax' | 'epc' | 'maps';
+
+export type PublicData = {
+  postcode: string;
+  lat?: number;
+  lng?: number;
+  district?: string;
+  districtCode?: string;
+  fetchedAt?: string;         // ISO timestamp of the last pull
+  status: Partial<Record<PublicDataSourceKey, PublicDataStatus>>;
+  flood?: FloodInfo;
+  hpi?: HpiInfo;
+  demographics?: Demographics;
+  pricePaid?: PricePaidInfo;
+  planning?: PlanningInfo;
+  councilTax?: CouncilTaxInfo;
+  epc?: EpcInfo;
+  maps?: MapLayers;
 };
 
 export type DocumentKind = 'floor-plan' | 'title-plan' | 'epc' | 'land-registry' | 'other';
@@ -79,10 +219,14 @@ export type Deal = {
   id: string;
   createdAt: string;
   address: string;
+  postcode?: string;
   client: string;
   source: 'estate-agent' | 'auction' | 'direct-to-vendor';
   progress: number;
   delivered: boolean;
+
+  publicData?: PublicData;
+  vendorCompany?: VendorCompany;
 
   criteria: {
     budget: string;
@@ -234,6 +378,7 @@ export function emptyDeal(id: string, initial: Partial<Deal> = {}): Deal {
 type ServerDealRow = {
   id: string;
   address: string;
+  postcode: string | null;
   source: string;
   currentStage: number;
   delivered: boolean;
@@ -247,6 +392,7 @@ function rowToDeal(row: ServerDealRow): Deal {
     ...inputs,
     id: row.id,
     address: row.address,
+    postcode: row.postcode ?? inputs.postcode,
     source: row.source as Deal['source'],
     progress: row.currentStage,
     delivered: row.delivered,
@@ -346,6 +492,36 @@ export async function setStageProgress(dealId: string, stage: number): Promise<v
 // ────────────────────────────────────────────────────────────────────────────
 // Computed values (pure functions on the in-memory Deal object).
 // ────────────────────────────────────────────────────────────────────────────
+
+// ── HPI comp adjustment (pure, client-safe) ──────────────────────────────────
+
+/** Pull a YYYY-MM out of a comp's free-text detail (e.g. "Sold 2025-08 ..."). */
+export function parseSoldMonth(detail: string): string | null {
+  const m = detail.match(/(\d{4})[-/](\d{2})/);
+  return m ? `${m[1]}-${m[2]}` : null;
+}
+
+/** Parse a £ value string ("£128,000") to a number, or null. */
+export function parseMoney(value: string): number | null {
+  const n = parseFloat(value.replace(/[^0-9.]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Adjust a sold price from its sold-month index to the latest-month index.
+ * Returns null if the sold month can't be mapped to the HPI series.
+ */
+export function hpiAdjustValue(
+  soldPrice: number,
+  soldMonth: string,
+  hpi: HpiInfo,
+): { adjusted: number; ratio: number } | null {
+  const exact = hpi.series.find((p) => p.month === soldMonth);
+  const earlier = exact ?? [...hpi.series].reverse().find((p) => p.month <= soldMonth);
+  if (!earlier || earlier.index <= 0) return null;
+  const ratio = hpi.latestIndex / earlier.index;
+  return { adjusted: Math.round(soldPrice * ratio), ratio };
+}
 
 export type ComputedFinancials = {
   purchasePrice: number;
