@@ -8,7 +8,7 @@ import type {
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
-  CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, Map as MapIcon, ExternalLink,
+  CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
   GraduationCap,
 } from 'lucide-react';
 
@@ -339,27 +339,53 @@ export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[]
 }
 
 /**
- * The legal title register + plan is paid HMLR data (no free API), so we link
- * straight to HMLR's "Search for land and property information" service where a
- * sourcer can buy the official copy (~GBP 7) for the exact address.
+ * Deep-links for further/official checks the buyer may want to run themselves -
+ * including the paid ones we deliberately don't pull (title register, broadband,
+ * detailed flood). Pre-filled with the postcode where the service supports it.
  */
-export function TitleRegisterLink({ postcode }: { postcode?: string }) {
-  const href = 'https://search-property-information.landregistry.gov.uk/';
+export function OfficialLinks({ postcode }: { postcode?: string }) {
+  const pc = (postcode ?? '').trim();
+  const enc = encodeURIComponent(pc);
+  const links: { label: string; sub: string; href: string; paid?: boolean }[] = [
+    { label: 'Title register & plan', sub: 'Registered owner, tenure, charges, covenants', href: 'https://search-property-information.landregistry.gov.uk/', paid: true },
+    { label: 'Council tax band', sub: 'Confirm the VOA band', href: 'https://www.tax.service.gov.uk/check-council-tax-band/search' },
+    { label: 'Detailed flood risk', sub: 'Rivers, sea, surface water + history', href: 'https://check-long-term-flood-risk.service.gov.uk/postcode' },
+    { label: 'Energy certificate (EPC)', sub: 'Full certificate + recommendations', href: pc ? `https://find-energy-certificate.service.gov.uk/find-a-certificate/search-by-postcode?postcode=${enc}` : 'https://find-energy-certificate.service.gov.uk/' },
+    { label: 'Broadband & mobile', sub: 'Ofcom coverage checker', href: 'https://checker.ofcom.org.uk/en-gb/broadband-coverage' },
+    { label: 'Local crime detail', sub: 'Street-level on police.uk', href: 'https://www.police.uk/' },
+    { label: 'Planning & local council', sub: "The property's planning authority", href: 'https://www.gov.uk/find-local-council' },
+    { label: 'School admissions & catchments', sub: 'Council admissions (catchments vary)', href: 'https://www.gov.uk/schools-admissions' },
+    { label: 'Vendor company check', sub: 'Companies House (if selling via a company)', href: 'https://find-and-update.company-information.service.gov.uk/' },
+  ];
   return (
-    <div className="bg-bg rounded-lg p-4 flex items-start justify-between gap-4">
-      <div className="flex items-start gap-2">
-        <MapIcon size={15} className="text-navy mt-0.5" />
-        <div>
-          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">Title register & plan</div>
-          <div className="text-xs text-ink-mid mt-1">
-            The legal title (registered owner, tenure, charges, covenants) is paid HM Land Registry data.
-            Buy the official copy for {postcode || 'this address'} direct from HMLR.
-          </div>
-        </div>
+    <div className="bg-bg rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <ExternalLink size={15} className="text-navy" />
+        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">Further checks & official sources</div>
       </div>
-      <a href={href} target="_blank" rel="noreferrer" className="btn-secondary text-xs inline-flex items-center gap-1.5 flex-shrink-0">
-        Buy from HMLR <ExternalLink size={13} />
-      </a>
+      <div className="text-xs text-ink-muted mb-3">
+        Free data is pulled above. These open the official services for deeper or paid checks{pc ? ` for ${pc}` : ''}.
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {links.map((l) => (
+          <a
+            key={l.label}
+            href={l.href}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-start justify-between gap-2 bg-white rounded-lg px-3 py-2 border border-black/[0.06] hover:border-navy/30 transition group"
+          >
+            <div>
+              <div className="text-xs font-bold text-ink flex items-center gap-1.5">
+                {l.label}
+                {l.paid && <span className="text-[9px] font-bold text-amber bg-amber/15 px-1 py-0.5 rounded uppercase">Paid</span>}
+              </div>
+              <div className="text-[10px] text-ink-muted">{l.sub}</div>
+            </div>
+            <ExternalLink size={12} className="text-ink-muted group-hover:text-navy mt-0.5 flex-shrink-0" />
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -386,7 +412,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
           <FloodAreaMap maps={data.maps} />
         </div>
       )}
-      <TitleRegisterLink postcode={data.postcode} />
+      <OfficialLinks postcode={data.postcode} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {data.flood && <FloodCard flood={data.flood} />}
         {data.epc && <EpcCard epc={data.epc} />}
