@@ -27,6 +27,7 @@ import { fetchAmenities } from '@/server/public-data/amenities';
 import { fetchPricePaid } from '@/server/public-data/price-paid';
 import { fetchPlanning } from '@/server/public-data/planning';
 import { fetchPlanningApplications } from '@/server/public-data/planning-applications';
+import { fetchSchools } from '@/server/public-data/schools';
 import { fetchEpc } from '@/server/public-data/epc';
 import { lookupCompany } from '@/server/public-data/companies';
 import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
@@ -87,7 +88,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, epc] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, epc] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -96,6 +97,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchPricePaid(geo.postcode),
       fetchPlanning(geo.postcode, geo.lat, geo.lng),
       fetchPlanningApplications(geo.lat, geo.lng),
+      fetchSchools(geo.lat, geo.lng),
       fetchEpc(geo.postcode, address),
     ]);
 
@@ -132,6 +134,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     pricePaid: status(pricePaid),
     planning: status(planning),
     planningApplications: status(planningApplications),
+    schools: status(schools),
     epc: status(epc),
     maps: hasMaps ? 'ok' : 'unavailable',
   };
@@ -149,6 +152,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(pricePaid ? { pricePaid } : {}),
     ...(planning ? { planning } : {}),
     ...(planningApplications ? { planningApplications } : {}),
+    ...(schools ? { schools } : {}),
     ...(epc ? { epc } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,

@@ -200,10 +200,19 @@ export type VendorCompany = {
   fetchedAt?: string;
 };
 
+// Nearest schools with Ofsted ratings (DfE/Ofsted data).
+export type SchoolInfo = {
+  name: string;
+  type: string;              // Primary | Secondary | ...
+  ofstedRating?: string;     // Outstanding | Good | Requires improvement | Inadequate
+  ofstedDate?: string;
+  distanceMi: number;
+};
+
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
-  | 'councilTax' | 'epc' | 'maps';
+  | 'schools' | 'councilTax' | 'epc' | 'maps';
 
 export type PublicData = {
   postcode: string;
@@ -219,6 +228,7 @@ export type PublicData = {
   pricePaid?: PricePaidInfo;
   planning?: PlanningInfo;
   planningApplications?: PlanningApplication[];
+  schools?: SchoolInfo[];
   councilTax?: CouncilTaxInfo;
   epc?: EpcInfo;
   maps?: MapLayers;

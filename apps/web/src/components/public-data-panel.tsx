@@ -4,11 +4,12 @@ import dynamic from 'next/dynamic';
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
-  PlanningApplication, MapLayers,
+  PlanningApplication, MapLayers, SchoolInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, Map as MapIcon, ExternalLink,
+  GraduationCap,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -31,7 +32,7 @@ const SOURCE_LABEL: Record<string, string> = {
   geocode: 'Geocode', demographics: 'Demographics', hpi: 'House Price Index',
   crime: 'Crime', flood: 'Flood risk', amenities: 'Amenities',
   pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
-  councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps',
+  schools: 'Schools', councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -253,6 +254,48 @@ export function FloodAreaMap({ maps }: { maps: MapLayers }) {
   );
 }
 
+function ofstedTone(rating?: string): string {
+  const r = (rating ?? '').toLowerCase();
+  if (r.includes('outstanding')) return 'text-success-dark bg-success-light border-success/30';
+  if (r.includes('good')) return 'text-navy bg-navy/[0.08] border-navy/20';
+  if (r.includes('requires')) return 'text-amber bg-amber/15 border-amber/30';
+  if (r.includes('inadequate')) return 'text-red-700 bg-red-50 border-red-200';
+  return 'text-ink-mid bg-bg border-black/10';
+}
+
+export function SchoolsCard({ schools }: { schools: SchoolInfo[] }) {
+  if (schools.length === 0) return null;
+  return (
+    <div className="bg-bg rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <GraduationCap size={15} className="text-navy" />
+        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">
+          Schools & Ofsted ({schools.length} nearest)
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {schools.slice(0, 8).map((s, i) => (
+          <div key={i} className="grid grid-cols-12 items-center gap-2 text-xs">
+            <div className="col-span-6 text-ink font-semibold truncate" title={s.name}>{s.name}</div>
+            <div className="col-span-3 text-ink-muted truncate">{s.type}</div>
+            <div className="col-span-2">
+              {s.ofstedRating ? (
+                <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${ofstedTone(s.ofstedRating)}`}>
+                  {s.ofstedRating}
+                </span>
+              ) : (
+                <span className="text-[10px] text-ink-muted">No rating</span>
+              )}
+            </div>
+            <div className="col-span-1 text-right text-ink-muted tabular-nums">{s.distanceMi}mi</div>
+          </div>
+        ))}
+      </div>
+      <div className="text-[10px] text-ink-muted mt-2 italic">Source: DfE / Ofsted. Catchment areas vary by council.</div>
+    </div>
+  );
+}
+
 export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[] }) {
   if (apps.length === 0) {
     return (
@@ -351,6 +394,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
         {data.demographics && <DemographicsCard d={data.demographics} />}
         {data.planning && <PlanningCard planning={data.planning} />}
       </div>
+      {data.schools && <SchoolsCard schools={data.schools} />}
       {data.planningApplications && <PlanningApplicationsCard apps={data.planningApplications} />}
       {data.pricePaid && <PricePaidTable pp={data.pricePaid} />}
       {data.fetchedAt && (
