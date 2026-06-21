@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { Map as MlMap, StyleSpecification } from 'maplibre-gl';
+import type { Map as MlMap, StyleSpecification, GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Loader2, Flame, Users, MapPin } from 'lucide-react';
 import { getCrimeHeat, getDeprivation } from '@/server/actions/map-data';
 
 type Layer = 'property' | 'crime' | 'deprivation';
+
+const RADII = [1, 5, 15] as const;
 
 const BASE_STYLE: StyleSpecification = {
   version: 8,
@@ -26,6 +28,7 @@ export function RiskMap({ lat, lng }: { lat: number; lng: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const [layer, setLayer] = useState<Layer>('property');
+  const [radiusKm, setRadiusKm] = useState<number>(5);
   const [ready, setReady] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [present, setPresent] = useState<{ crime: boolean; deprivation: boolean }>({
@@ -44,7 +47,7 @@ export function RiskMap({ lat, lng }: { lat: number; lng: number }) {
         container: containerRef.current,
         style: BASE_STYLE,
         center: [lng, lat],
-        zoom: 14,
+        zoom: 13,
       });
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
@@ -60,61 +63,71 @@ export function RiskMap({ lat, lng }: { lat: number; lng: number }) {
     };
   }, [lat, lng]);
 
-  // Once loaded, fetch both data layers and add them hidden.
+  // (Re)load the data layers whenever the radius changes; fit the view to it.
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
     let cancelled = false;
     setLoadingData(true);
+
+    const dLat = radiusKm / 111;
+    const dLng = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
+    map.fitBounds(
+      [[lng - dLng, lat - dLat], [lng + dLng, lat + dLat]],
+      { padding: 24, duration: 500 },
+    );
+
     (async () => {
-      const [crime, deprivation] = await Promise.all([getCrimeHeat(lat, lng), getDeprivation(lat, lng)]);
+      const [crime, deprivation] = await Promise.all([
+        getCrimeHeat(lat, lng, radiusKm),
+        getDeprivation(lat, lng, radiusKm),
+      ]);
       if (cancelled || !mapRef.current) return;
 
+      const depVis = layer === 'deprivation' ? 'visible' : 'none';
+      const crimeVis = layer === 'crime' ? 'visible' : 'none';
+
       if (deprivation && deprivation.features.length > 0) {
-        map.addSource('imd', { type: 'geojson', data: deprivation as never });
-        map.addLayer({
-          id: 'imd-fill',
-          type: 'fill',
-          source: 'imd',
-          layout: { visibility: 'none' },
-          paint: {
-            // decile 1-3 red (most deprived), 4-7 amber, 8-10 green
-            'fill-color': ['step', ['get', 'IMDDecil'], '#d0021b', 4, '#f5a623', 8, '#2e7d32'],
-            'fill-opacity': 0.4,
-          },
-        });
-        map.addLayer({
-          id: 'imd-line',
-          type: 'line',
-          source: 'imd',
-          layout: { visibility: 'none' },
-          paint: { 'line-color': '#5b6573', 'line-width': 0.5 },
-        });
+        const src = map.getSource('imd') as GeoJSONSource | undefined;
+        if (src) src.setData(deprivation as never);
+        else {
+          map.addSource('imd', { type: 'geojson', data: deprivation as never });
+          map.addLayer({
+            id: 'imd-fill', type: 'fill', source: 'imd', layout: { visibility: depVis },
+            paint: {
+              'fill-color': ['step', ['get', 'IMDDecil'], '#d0021b', 4, '#f5a623', 8, '#2e7d32'],
+              'fill-opacity': 0.4,
+            },
+          });
+          map.addLayer({
+            id: 'imd-line', type: 'line', source: 'imd', layout: { visibility: depVis },
+            paint: { 'line-color': '#5b6573', 'line-width': 0.5 },
+          });
+        }
       }
 
       if (crime && crime.features.length > 0) {
-        map.addSource('crime', { type: 'geojson', data: crime as never });
-        map.addLayer({
-          id: 'crime-heat',
-          type: 'heatmap',
-          source: 'crime',
-          layout: { visibility: 'none' },
-          paint: {
-            // Radius + intensity scale with zoom so the map shows surrounding
-            // areas when zoomed out instead of collapsing into one blob.
-            'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 10, 4, 12, 9, 14, 18, 16, 32],
-            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 13, 0.9, 16, 1.4],
-            'heatmap-opacity': 0.7,
-            'heatmap-color': [
-              'interpolate', ['linear'], ['heatmap-density'],
-              0, 'rgba(0,0,0,0)',
-              0.2, '#2e7d32',
-              0.45, '#f5a623',
-              0.7, '#e8590c',
-              1, '#d0021b',
-            ],
-          },
-        });
+        const src = map.getSource('crime') as GeoJSONSource | undefined;
+        if (src) src.setData(crime as never);
+        else {
+          map.addSource('crime', { type: 'geojson', data: crime as never });
+          map.addLayer({
+            id: 'crime-heat', type: 'heatmap', source: 'crime', layout: { visibility: crimeVis },
+            paint: {
+              'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 10, 4, 12, 9, 14, 18, 16, 32],
+              'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 13, 0.9, 16, 1.4],
+              'heatmap-opacity': 0.7,
+              'heatmap-color': [
+                'interpolate', ['linear'], ['heatmap-density'],
+                0, 'rgba(0,0,0,0)',
+                0.2, '#2e7d32',
+                0.45, '#f5a623',
+                0.7, '#e8590c',
+                1, '#d0021b',
+              ],
+            },
+          });
+        }
       }
 
       if (!cancelled) {
@@ -128,7 +141,8 @@ export function RiskMap({ lat, lng }: { lat: number; lng: number }) {
     return () => {
       cancelled = true;
     };
-  }, [ready, lat, lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, lat, lng, radiusKm]);
 
   // Toggle layer visibility.
   useEffect(() => {
@@ -163,6 +177,22 @@ export function RiskMap({ lat, lng }: { lat: number; lng: number }) {
             {t.icon} {t.label}
           </button>
         ))}
+
+        {/* Radius selector */}
+        <div className="flex items-center gap-1 ml-2 bg-white rounded-lg p-0.5 border border-black/[0.06]">
+          {RADII.map((r) => (
+            <button
+              key={r}
+              onClick={() => setRadiusKm(r)}
+              className={`text-xs font-bold px-2.5 py-1 rounded transition ${
+                radiusKm === r ? 'bg-navy text-white' : 'text-ink-mid hover:text-navy'
+              }`}
+            >
+              {r}km
+            </button>
+          ))}
+        </div>
+
         {loadingData && <Loader2 size={14} className="animate-spin text-ink-muted ml-1" />}
         <div className="ml-auto flex items-center gap-2 pr-1">
           {layer === 'crime' && <Legend items={[['Low', '#2e7d32'], ['Med', '#f5a623'], ['High', '#d0021b']]} />}

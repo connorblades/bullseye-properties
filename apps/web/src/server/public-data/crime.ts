@@ -49,16 +49,20 @@ async function recentMonths(n: number): Promise<string[]> {
  * surrounding areas, not a single central cluster. The box stays well under the
  * API's 10k-result cap. One API call. Cached 24h. Fail-soft.
  */
-export async function fetchCrimePoints(lat: number, lng: number): Promise<GeoCollection | null> {
+export async function fetchCrimePoints(
+  lat: number,
+  lng: number,
+  radiusKm = 3,
+): Promise<GeoCollection | null> {
   return failSoft('crime-points', async () => {
     const months = await recentMonths(1);
     if (months.length === 0) throw new Error('no crime months available');
     const month = months[0];
-    const key = `crimePoints:${lat.toFixed(3)},${lng.toFixed(3)}:${month}`;
+    const key = `crimePoints:${lat.toFixed(3)},${lng.toFixed(3)}:${radiusKm}:${month}`;
     return cached(key, 'crime', TTL.day, () =>
       failSoft('crime-points-fetch', async () => {
-        const halfLat = 3 / 111; // ~3km each way -> 6km box
-        const halfLng = 3 / (111 * Math.cos((lat * Math.PI) / 180));
+        const halfLat = radiusKm / 111;
+        const halfLng = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
         const n = lat + halfLat, s = lat - halfLat, e = lng + halfLng, w = lng - halfLng;
         const poly = `${n},${w}:${n},${e}:${s},${e}:${s},${w}`;
         const url = `${CRIME_URL}?poly=${encodeURIComponent(poly)}&date=${month}`;
