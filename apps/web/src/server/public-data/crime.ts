@@ -15,6 +15,7 @@
  */
 
 import type { CrimeStats } from '@/lib/deal-store';
+import type { GeoCollection } from './geojson';
 import { cached, TTL } from './cache';
 import { fetchJson, failSoft } from './http';
 
@@ -23,6 +24,10 @@ const CRIME_URL = 'https://data.police.uk/api/crimes-street/all-crime';
 
 type DateEntry = { date: string };
 type CrimeRecord = { category: string };
+type CrimeRecordWithLoc = {
+  category: string;
+  location?: { latitude: string; longitude: string };
+};
 
 function humanizeCategory(slug: string): string {
   return slug
@@ -35,6 +40,38 @@ function humanizeCategory(slug: string): string {
 async function recentMonths(n: number): Promise<string[]> {
   const dates = await fetchJson<DateEntry[]>(DATES_URL);
   return dates.slice(0, n).map((d) => d.date);
+}
+
+/**
+ * Individual crime locations for the latest available month, as GeoJSON points,
+ * to feed the interactive heat map. One API call. Cached 24h. Fail-soft.
+ */
+export async function fetchCrimePoints(lat: number, lng: number): Promise<GeoCollection | null> {
+  return failSoft('crime-points', async () => {
+    const months = await recentMonths(1);
+    if (months.length === 0) throw new Error('no crime months available');
+    const month = months[0];
+    const key = `crimePoints:${lat.toFixed(4)},${lng.toFixed(4)}:${month}`;
+    return cached(key, 'crime', TTL.day, () =>
+      failSoft('crime-points-fetch', async () => {
+        const url = `${CRIME_URL}?lat=${lat}&lng=${lng}&date=${month}`;
+        const records = await fetchJson<CrimeRecordWithLoc[]>(url);
+        return {
+          type: 'FeatureCollection',
+          features: records
+            .filter((r) => r.location)
+            .map((r) => ({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Point',
+                coordinates: [parseFloat(r.location!.longitude), parseFloat(r.location!.latitude)],
+              },
+              properties: { category: r.category },
+            })),
+        } satisfies GeoCollection;
+      }),
+    );
+  });
 }
 
 export async function fetchCrime(lat: number, lng: number): Promise<CrimeStats | null> {

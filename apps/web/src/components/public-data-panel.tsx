@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
@@ -9,6 +10,16 @@ import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, Map as MapIcon, ExternalLink,
 } from 'lucide-react';
+
+// MapLibre needs the browser - load the interactive map client-side only.
+const RiskMap = dynamic(() => import('@/components/risk-map').then((m) => m.RiskMap), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-bg rounded-lg flex items-center justify-center text-xs text-ink-muted" style={{ height: 360 }}>
+      Loading interactive map…
+    </div>
+  ),
+});
 
 function fmtGBP(n: number): string {
   return '£' + Math.round(n).toLocaleString('en-GB');
@@ -318,6 +329,14 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
   return (
     <div className="space-y-4">
       <SourceStatusGrid data={data} />
+      {data.lat != null && data.lng != null && (
+        <div>
+          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">
+            Interactive risk map (OS · crime heat · deprivation)
+          </div>
+          <RiskMap lat={data.lat} lng={data.lng} />
+        </div>
+      )}
       {data.maps && <MapsRow maps={data.maps} />}
       {data.maps?.floodOverlay && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
