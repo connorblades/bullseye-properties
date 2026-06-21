@@ -31,6 +31,16 @@ type PlanItRecord = {
 };
 type PlanItResponse = { records?: PlanItRecord[] };
 
+const RESIDENTIAL_RE = /\b(dwelling|residential|housing|new homes?|flats?|apartments?|bungalows?)\b/i;
+const UNITS_RE = /\b(\d{1,4})\s*(?:no\.?\s*)?(?:dwelling|home|unit|house|flat|apartment)s?\b/i;
+
+function parseUnits(description: string): number | undefined {
+  const m = description.match(UNITS_RE);
+  if (!m) return undefined;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 export async function fetchPlanningApplications(
   lat: number,
   lng: number,
@@ -45,18 +55,25 @@ export async function fetchPlanningApplications(
       const records = data.records ?? [];
       if (records.length === 0) return [];
 
-      return records.map((r) => ({
-        reference: r.name ?? '',
-        description: (r.description ?? '').trim(),
-        appType: r.app_type,
-        status: r.app_state,
-        startDate: r.start_date,
-        decidedDate: r.decided_date,
-        distanceKm:
-          typeof r.distance === 'number' ? Math.round((r.distance / 1000) * 100) / 100 : undefined,
-        address: r.address,
-        url: r.url ?? r.link,
-      })) satisfies PlanningApplication[];
+      return records.map((r) => {
+        const description = (r.description ?? '').trim();
+        const residential = RESIDENTIAL_RE.test(description);
+        const units = residential ? parseUnits(description) : undefined;
+        return {
+          reference: r.name ?? '',
+          description,
+          appType: r.app_type,
+          status: r.app_state,
+          startDate: r.start_date,
+          decidedDate: r.decided_date,
+          distanceKm:
+            typeof r.distance === 'number' ? Math.round((r.distance / 1000) * 100) / 100 : undefined,
+          address: r.address,
+          url: r.url ?? r.link,
+          residential,
+          ...(units ? { units } : {}),
+        };
+      }) satisfies PlanningApplication[];
     }),
   );
 }

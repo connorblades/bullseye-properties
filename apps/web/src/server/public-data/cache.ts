@@ -18,6 +18,7 @@ import { publicDataCache } from '@/server/db/schema';
 export type CacheSource =
   | 'geocode' | 'hpi' | 'crime' | 'flood' | 'amenities'
   | 'pricePaid' | 'planning' | 'planningApplications' | 'schools'
+  | 'areaStats' | 'airQuality'
   | 'councilTax' | 'epc' | 'companies' | 'deprivation' | 'maps';
 
 export const TTL = {

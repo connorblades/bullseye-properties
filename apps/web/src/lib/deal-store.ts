@@ -115,6 +115,28 @@ export type PlanningApplication = {
   distanceKm?: number;
   address?: string;
   url?: string;
+  residential?: boolean;      // mentions dwellings/homes/housing
+  units?: number;             // parsed dwelling count where stated
+};
+
+// Census 2021 area profile (MSOA): population + labour market.
+export type AreaStats = {
+  areaName: string;
+  population: number;
+  densityPerKm2: number;
+  employmentRate?: number;        // % in employment
+  economicActivityRate?: number;
+  inactiveRate?: number;
+  unemployedRate?: number;
+};
+
+// Open-Meteo air quality (European AQI).
+export type AirQualityInfo = {
+  aqi: number;
+  band: string;                   // Good | Fair | Moderate | Poor | Very poor | Extremely poor
+  pm25?: number;
+  pm10?: number;
+  no2?: number;
 };
 
 // Census/deprivation context, lifted from postcodes.io (free, no extra call).
@@ -212,7 +234,7 @@ export type SchoolInfo = {
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
-  | 'schools' | 'councilTax' | 'epc' | 'maps';
+  | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps';
 
 export type PublicData = {
   postcode: string;
@@ -229,6 +251,8 @@ export type PublicData = {
   planning?: PlanningInfo;
   planningApplications?: PlanningApplication[];
   schools?: SchoolInfo[];
+  areaStats?: AreaStats;
+  airQuality?: AirQualityInfo;
   councilTax?: CouncilTaxInfo;
   epc?: EpcInfo;
   maps?: MapLayers;

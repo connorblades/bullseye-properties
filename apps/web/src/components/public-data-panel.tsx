@@ -4,12 +4,12 @@ import dynamic from 'next/dynamic';
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
-  PlanningApplication, MapLayers, SchoolInfo,
+  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
-  GraduationCap,
+  GraduationCap, Building2, Wind,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -32,7 +32,8 @@ const SOURCE_LABEL: Record<string, string> = {
   geocode: 'Geocode', demographics: 'Demographics', hpi: 'House Price Index',
   crime: 'Crime', flood: 'Flood risk', amenities: 'Amenities',
   pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
-  schools: 'Schools', councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps',
+  schools: 'Schools', areaStats: 'Population & jobs', airQuality: 'Air quality',
+  councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -254,6 +255,40 @@ export function FloodAreaMap({ maps }: { maps: MapLayers }) {
   );
 }
 
+export function AreaStatsCard({ stats }: { stats: AreaStats }) {
+  const pct = (v?: number) => (v != null ? `${v.toFixed(1)}%` : '-');
+  return (
+    <Card icon={<Building2 size={15} className="text-navy" />} title="Population & jobs (Census 2021)">
+      <div className="text-xs text-ink-mid space-y-0.5">
+        <div>{stats.areaName}</div>
+        <div>Population: <span className="font-bold text-ink">{stats.population.toLocaleString('en-GB')}</span> <span className="text-ink-muted">({stats.densityPerKm2.toLocaleString('en-GB')}/km&sup2;)</span></div>
+        <div>In employment: <span className="font-bold text-ink">{pct(stats.employmentRate)}</span></div>
+        <div>Economically active: {pct(stats.economicActivityRate)} · inactive: {pct(stats.inactiveRate)}</div>
+      </div>
+    </Card>
+  );
+}
+
+export function AirQualityCard({ aq }: { aq: AirQualityInfo }) {
+  const tone =
+    aq.aqi <= 40 ? 'text-success-dark bg-success-light border-success/30'
+    : aq.aqi <= 60 ? 'text-amber bg-amber/15 border-amber/30'
+    : 'text-red-700 bg-red-50 border-red-200';
+  return (
+    <Card icon={<Wind size={15} className="text-navy" />} title="Air quality">
+      <div className={`inline-flex items-center gap-2 rounded border px-2.5 py-1 text-sm font-black mb-2 ${tone}`}>
+        AQI {aq.aqi} · {aq.band}
+      </div>
+      <div className="text-xs text-ink-mid space-y-0.5">
+        {aq.pm25 != null && <div>PM2.5: {aq.pm25} µg/m&sup3;</div>}
+        {aq.pm10 != null && <div>PM10: {aq.pm10} µg/m&sup3;</div>}
+        {aq.no2 != null && <div>NO&#8322;: {aq.no2} µg/m&sup3;</div>}
+      </div>
+      <div className="text-[10px] text-ink-muted mt-1 italic">European AQI (Open-Meteo).</div>
+    </Card>
+  );
+}
+
 function ofstedTone(rating?: string): string {
   const r = (rating ?? '').toLowerCase();
   if (r.includes('outstanding')) return 'text-success-dark bg-success-light border-success/30';
@@ -308,6 +343,8 @@ export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[]
       </div>
     );
   }
+  const residential = apps.filter((a) => a.residential);
+  const totalUnits = residential.reduce((sum, a) => sum + (a.units ?? 0), 0);
   return (
     <div className="bg-bg rounded-lg p-4">
       <div className="flex items-center gap-2 mb-3">
@@ -316,6 +353,12 @@ export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[]
           Planning applications ({apps.length}, ~500m)
         </div>
       </div>
+      {residential.length > 0 && (
+        <div className="text-xs text-navy bg-navy/[0.04] border border-navy/15 rounded-lg px-3 py-2 mb-3">
+          <strong>New-homes pipeline:</strong> {residential.length} residential scheme{residential.length === 1 ? '' : 's'} nearby
+          {totalUnits > 0 ? <> · ~<strong>{totalUnits.toLocaleString('en-GB')} dwellings</strong> where stated</> : null}
+        </div>
+      )}
       <div className="space-y-2">
         {apps.slice(0, 8).map((a, i) => (
           <div key={i} className="text-xs border-b border-black/[0.05] last:border-0 pb-2 last:pb-0">
@@ -417,6 +460,8 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
         {data.flood && <FloodCard flood={data.flood} />}
         {data.epc && <EpcCard epc={data.epc} />}
         {data.hpi && <HpiCard hpi={data.hpi} />}
+        {data.areaStats && <AreaStatsCard stats={data.areaStats} />}
+        {data.airQuality && <AirQualityCard aq={data.airQuality} />}
         {data.demographics && <DemographicsCard d={data.demographics} />}
         {data.planning && <PlanningCard planning={data.planning} />}
       </div>

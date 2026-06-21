@@ -28,6 +28,8 @@ import { fetchPricePaid } from '@/server/public-data/price-paid';
 import { fetchPlanning } from '@/server/public-data/planning';
 import { fetchPlanningApplications } from '@/server/public-data/planning-applications';
 import { fetchSchools } from '@/server/public-data/schools';
+import { fetchAreaStats } from '@/server/public-data/census';
+import { fetchAirQuality } from '@/server/public-data/air-quality';
 import { fetchEpc } from '@/server/public-data/epc';
 import { lookupCompany } from '@/server/public-data/companies';
 import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
@@ -88,7 +90,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, epc] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, epc] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -98,6 +100,8 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchPlanning(geo.postcode, geo.lat, geo.lng),
       fetchPlanningApplications(geo.lat, geo.lng),
       fetchSchools(geo.lat, geo.lng),
+      fetchAreaStats(geo.lat, geo.lng),
+      fetchAirQuality(geo.lat, geo.lng),
       fetchEpc(geo.postcode, address),
     ]);
 
@@ -135,6 +139,8 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     planning: status(planning),
     planningApplications: status(planningApplications),
     schools: status(schools),
+    areaStats: status(areaStats),
+    airQuality: status(airQuality),
     epc: status(epc),
     maps: hasMaps ? 'ok' : 'unavailable',
   };
@@ -153,6 +159,8 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(planning ? { planning } : {}),
     ...(planningApplications ? { planningApplications } : {}),
     ...(schools ? { schools } : {}),
+    ...(areaStats ? { areaStats } : {}),
+    ...(airQuality ? { airQuality } : {}),
     ...(epc ? { epc } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,
