@@ -44,17 +44,24 @@ async function recentMonths(n: number): Promise<string[]> {
 
 /**
  * Individual crime locations for the latest available month, as GeoJSON points,
- * to feed the interactive heat map. One API call. Cached 24h. Fail-soft.
+ * to feed the interactive heat map. Uses the police `poly` query over a ~6km box
+ * (not the ~1-mile point radius) so the heat map shows the property against its
+ * surrounding areas, not a single central cluster. The box stays well under the
+ * API's 10k-result cap. One API call. Cached 24h. Fail-soft.
  */
 export async function fetchCrimePoints(lat: number, lng: number): Promise<GeoCollection | null> {
   return failSoft('crime-points', async () => {
     const months = await recentMonths(1);
     if (months.length === 0) throw new Error('no crime months available');
     const month = months[0];
-    const key = `crimePoints:${lat.toFixed(4)},${lng.toFixed(4)}:${month}`;
+    const key = `crimePoints:${lat.toFixed(3)},${lng.toFixed(3)}:${month}`;
     return cached(key, 'crime', TTL.day, () =>
       failSoft('crime-points-fetch', async () => {
-        const url = `${CRIME_URL}?lat=${lat}&lng=${lng}&date=${month}`;
+        const halfLat = 3 / 111; // ~3km each way -> 6km box
+        const halfLng = 3 / (111 * Math.cos((lat * Math.PI) / 180));
+        const n = lat + halfLat, s = lat - halfLat, e = lng + halfLng, w = lng - halfLng;
+        const poly = `${n},${w}:${n},${e}:${s},${e}:${s},${w}`;
+        const url = `${CRIME_URL}?poly=${encodeURIComponent(poly)}&date=${month}`;
         const records = await fetchJson<CrimeRecordWithLoc[]>(url);
         return {
           type: 'FeatureCollection',

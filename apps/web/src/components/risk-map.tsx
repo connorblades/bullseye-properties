@@ -100,9 +100,11 @@ export function RiskMap({ lat, lng }: { lat: number; lng: number }) {
           source: 'crime',
           layout: { visibility: 'none' },
           paint: {
-            'heatmap-radius': 28,
-            'heatmap-opacity': 0.75,
-            'heatmap-intensity': 1.1,
+            // Radius + intensity scale with zoom so the map shows surrounding
+            // areas when zoomed out instead of collapsing into one blob.
+            'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 10, 4, 12, 9, 14, 18, 16, 32],
+            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 13, 0.9, 16, 1.4],
+            'heatmap-opacity': 0.7,
             'heatmap-color': [
               'interpolate', ['linear'], ['heatmap-density'],
               0, 'rgba(0,0,0,0)',

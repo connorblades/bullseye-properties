@@ -16,10 +16,10 @@ const IMD_QUERY =
   'Lower_Super_Output_Area_(LSOA)_IMD2019_(WGS84)/FeatureServer/0/query';
 
 export async function fetchDeprivation(lat: number, lng: number): Promise<GeoCollection | null> {
-  const key = `deprivation:${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const key = `deprivation:v2:${lat.toFixed(3)},${lng.toFixed(3)}`;
   return cached(key, 'deprivation', TTL.month, () =>
     failSoft('deprivation', async () => {
-      const d = 0.012; // ~1.3km envelope
+      const d = 0.028; // ~3km envelope - matches the crime box for context when zoomed out
       const params = new URLSearchParams({
         geometry: `${lng - d},${lat - d},${lng + d},${lat + d}`,
         geometryType: 'esriGeometryEnvelope',
@@ -28,7 +28,7 @@ export async function fetchDeprivation(lat: number, lng: number): Promise<GeoCol
         spatialRel: 'esriSpatialRelIntersects',
         outFields: 'lsoa11nm,IMDDecil',
         returnGeometry: 'true',
-        maxAllowableOffset: '0.0004', // simplify so the payload stays small
+        maxAllowableOffset: '0.0005', // simplify so the payload stays small
         f: 'geojson',
       });
       const data = await fetchJson<GeoCollection>(`${IMD_QUERY}?${params.toString()}`);
