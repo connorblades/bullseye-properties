@@ -25,6 +25,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { deals, memberships } from '@/server/db/schema';
 import { getUser } from '@/server/auth/server';
+import { extractPostcode } from '@/server/public-data/geocode';
 import type { Deal } from '@/lib/deal-store';
 
 async function requireTenant(): Promise<{ userId: string; tenantId: string }> {
@@ -80,6 +81,13 @@ type CreateDealInput = {
 export async function createDeal(input: CreateDealInput) {
   const { tenantId } = await requireTenant();
 
+  // Address is mandatory and must carry a valid UK postcode - every downstream
+  // public-data and title pull keys off it.
+  const postcode = extractPostcode(input.address);
+  if (!postcode) {
+    throw new Error('A full property address including a valid UK postcode is required.');
+  }
+
   const existingCount = await db
     .select({ id: deals.id })
     .from(deals)
@@ -95,6 +103,7 @@ export async function createDeal(input: CreateDealInput) {
     tenantId,
     reference,
     address: input.address,
+    postcode,
     source: input.source,
     currentStage: 2,
     inputs: jsonbInputs,

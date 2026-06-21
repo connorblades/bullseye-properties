@@ -17,9 +17,24 @@ export default function NewDealPage() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  // A full address must carry a valid UK postcode - every public-data and title
+  // pull keys off it, so we block deal creation without one.
+  const UK_POSTCODE_RE = /[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i;
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const trimmed = address.trim();
+    if (!UK_POSTCODE_RE.test(trimmed)) {
+      setError('Enter the full property address including a valid UK postcode (e.g. "6, Browning Street, Mansfield, NG18 5PH").');
+      return;
+    }
+    if (trimmed.replace(UK_POSTCODE_RE, '').trim().replace(/[, ]+$/, '').length < 4) {
+      setError('Enter the full street address, not just the postcode.');
+      return;
+    }
+
     startTransition(async () => {
       try {
         const { id } = await createDeal({
@@ -66,7 +81,7 @@ export default function NewDealPage() {
               placeholder="6, Browning Street, Mansfield, NG18 5PH"
               className="w-full border border-black/[0.08] rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy/40 transition"
             />
-            <div className="text-xs text-ink-muted mt-2">UK addresses only. We will auto-pull Land Registry, EPC and location data on the next stage.</div>
+            <div className="text-xs text-ink-muted mt-2">Required. Full UK address including postcode - every public-data, title and map pull keys off it.</div>
           </div>
 
           <div>

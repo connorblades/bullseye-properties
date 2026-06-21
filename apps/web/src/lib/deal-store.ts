@@ -99,6 +99,23 @@ export type MapLayers = {
   amenities?: string;         // Mapbox static image URL
   flood?: string;
   crime?: string;
+  // Title boundary is a composite: a Mapbox aerial base + an HMLR INSPIRE
+  // boundary overlay (transparent PNG) for the same bbox, stacked in the UI.
+  titleBoundaryBase?: string;
+  titleBoundaryOverlay?: string;
+};
+
+// planning.data.gov.uk gives designations; PlanIt gives actual applications.
+export type PlanningApplication = {
+  reference: string;
+  description: string;
+  appType?: string;           // e.g. "Full", "Listed Building Consent"
+  status?: string;            // e.g. "Undecided", "Permitted", "Refused"
+  startDate?: string;
+  decidedDate?: string;
+  distanceKm?: number;
+  address?: string;
+  url?: string;
 };
 
 // Census/deprivation context, lifted from postcodes.io (free, no extra call).
@@ -186,7 +203,8 @@ export type VendorCompany = {
 
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
-  | 'amenities' | 'pricePaid' | 'planning' | 'councilTax' | 'epc' | 'maps';
+  | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
+  | 'councilTax' | 'epc' | 'maps';
 
 export type PublicData = {
   postcode: string;
@@ -201,6 +219,7 @@ export type PublicData = {
   demographics?: Demographics;
   pricePaid?: PricePaidInfo;
   planning?: PlanningInfo;
+  planningApplications?: PlanningApplication[];
   councilTax?: CouncilTaxInfo;
   epc?: EpcInfo;
   maps?: MapLayers;

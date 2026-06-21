@@ -3,10 +3,11 @@
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
+  PlanningApplication, MapLayers,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
-  CheckCircle2, XCircle, MinusCircle, Image as ImageIcon,
+  CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, Map as MapIcon,
 } from 'lucide-react';
 
 function fmtGBP(n: number): string {
@@ -18,8 +19,8 @@ function fmtGBP(n: number): string {
 const SOURCE_LABEL: Record<string, string> = {
   geocode: 'Geocode', demographics: 'Demographics', hpi: 'House Price Index',
   crime: 'Crime', flood: 'Flood risk', amenities: 'Amenities',
-  pricePaid: 'Price Paid', planning: 'Planning', councilTax: 'Council Tax',
-  epc: 'EPC', maps: 'Maps',
+  pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
+  councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -209,6 +210,67 @@ export function MapsRow({ maps }: { maps: NonNullable<PublicData['maps']> }) {
   );
 }
 
+export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[] }) {
+  if (apps.length === 0) {
+    return (
+      <div className="bg-bg rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <FileStack size={15} className="text-navy" />
+          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">Planning applications</div>
+        </div>
+        <p className="text-xs text-ink-mid">No recent planning applications within ~500m.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-bg rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <FileStack size={15} className="text-navy" />
+        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">
+          Planning applications ({apps.length}, ~500m)
+        </div>
+      </div>
+      <div className="space-y-2">
+        {apps.slice(0, 8).map((a, i) => (
+          <div key={i} className="text-xs border-b border-black/[0.05] last:border-0 pb-2 last:pb-0">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-semibold text-ink truncate" title={a.reference}>{a.reference || 'Application'}</span>
+              <span className="text-ink-muted whitespace-nowrap">
+                {a.status}{a.distanceKm != null ? ` · ${a.distanceKm} km` : ''}
+              </span>
+            </div>
+            <div className="text-ink-mid line-clamp-2">{a.description}</div>
+            <div className="text-[10px] text-ink-muted">
+              {a.appType ? `${a.appType} · ` : ''}{a.startDate ?? ''}
+              {a.url ? <> · <a href={a.url} target="_blank" rel="noreferrer" className="text-navy underline">view</a></> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="text-[10px] text-ink-muted mt-2 italic">Source: PlanIt (local-authority planning data).</div>
+    </div>
+  );
+}
+
+export function TitleBoundaryMap({ maps }: { maps: MapLayers }) {
+  if (!maps.titleBoundaryOverlay) return null;
+  return (
+    <div className="bg-bg rounded-lg overflow-hidden">
+      <div className="relative w-full" style={{ aspectRatio: '1 / 1', maxHeight: 320 }}>
+        {maps.titleBoundaryBase && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={maps.titleBoundaryBase} alt="Aerial base" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={maps.titleBoundaryOverlay} alt="HM Land Registry title boundaries" className="absolute inset-0 w-full h-full object-cover" />
+      </div>
+      <div className="px-3 py-2 text-xs font-bold text-ink-mid uppercase tracking-wider flex items-center gap-1.5">
+        <MapIcon size={12} /> Title boundaries (HM Land Registry INSPIRE)
+      </div>
+    </div>
+  );
+}
+
 // ── Composite panel for the Auto-Pull stage ──────────────────────────────────
 
 export function PublicDataPanel({ deal }: { deal: Deal }) {
@@ -218,6 +280,11 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
     <div className="space-y-4">
       <SourceStatusGrid data={data} />
       {data.maps && <MapsRow maps={data.maps} />}
+      {data.maps?.titleBoundaryOverlay && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <TitleBoundaryMap maps={data.maps} />
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {data.flood && <FloodCard flood={data.flood} />}
         {data.epc && <EpcCard epc={data.epc} />}
@@ -226,6 +293,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
         {data.demographics && <DemographicsCard d={data.demographics} />}
         {data.planning && <PlanningCard planning={data.planning} />}
       </div>
+      {data.planningApplications && <PlanningApplicationsCard apps={data.planningApplications} />}
       {data.pricePaid && <PricePaidTable pp={data.pricePaid} />}
       {data.fetchedAt && (
         <p className="text-[10px] text-ink-muted text-right">

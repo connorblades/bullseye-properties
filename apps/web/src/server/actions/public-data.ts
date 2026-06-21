@@ -26,10 +26,11 @@ import { fetchFlood } from '@/server/public-data/flood';
 import { fetchAmenities } from '@/server/public-data/amenities';
 import { fetchPricePaid } from '@/server/public-data/price-paid';
 import { fetchPlanning } from '@/server/public-data/planning';
+import { fetchPlanningApplications } from '@/server/public-data/planning-applications';
 import { fetchCouncilTax } from '@/server/public-data/council-tax';
 import { fetchEpc } from '@/server/public-data/epc';
 import { lookupCompany } from '@/server/public-data/companies';
-import { buildMapLayers } from '@/server/maps/static-maps';
+import { buildMapLayers, buildTitleBoundary } from '@/server/maps/static-maps';
 import type { VendorCompany } from '@/lib/deal-store';
 
 function status(v: unknown): PublicDataStatus {
@@ -87,16 +88,18 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, councilTax, epc] = await Promise.all([
-    fetchHpi(geo.district, geo.districtCode),
-    fetchCrime(geo.lat, geo.lng),
-    fetchFlood(geo.postcode, geo.lat, geo.lng),
-    fetchAmenities(geo.postcode, geo.lat, geo.lng),
-    fetchPricePaid(geo.postcode),
-    fetchPlanning(geo.postcode, geo.lat, geo.lng),
-    fetchCouncilTax(geo.postcode, address),
-    fetchEpc(geo.postcode, address),
-  ]);
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, councilTax, epc] =
+    await Promise.all([
+      fetchHpi(geo.district, geo.districtCode),
+      fetchCrime(geo.lat, geo.lng),
+      fetchFlood(geo.postcode, geo.lat, geo.lng),
+      fetchAmenities(geo.postcode, geo.lat, geo.lng),
+      fetchPricePaid(geo.postcode),
+      fetchPlanning(geo.postcode, geo.lat, geo.lng),
+      fetchPlanningApplications(geo.lat, geo.lng),
+      fetchCouncilTax(geo.postcode, address),
+      fetchEpc(geo.postcode, address),
+    ]);
 
   const demographics: Demographics = {
     imdRank: geo.imdRank,
@@ -110,13 +113,17 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   };
 
   // Static maps depend on the coordinates + flood/crime/amenities outputs.
-  const maps = buildMapLayers({
+  // Title boundary is built separately (its overlay needs no Mapbox token).
+  const baseMaps = buildMapLayers({
     lat: geo.lat,
     lng: geo.lng,
     floodBand: flood?.band ?? null,
     amenities: amenities ?? [],
     crimeTotal: crime?.total12mo ?? 0,
   });
+  const titleBoundary = buildTitleBoundary(geo.lat, geo.lng);
+  const maps = { ...(baseMaps ?? {}), ...titleBoundary };
+  const hasMaps = Object.keys(maps).length > 0;
 
   const statusMap: Partial<Record<PublicDataSourceKey, PublicDataStatus>> = {
     geocode: 'ok',
@@ -127,9 +134,10 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     amenities: status(amenities),
     pricePaid: status(pricePaid),
     planning: status(planning),
+    planningApplications: status(planningApplications),
     councilTax: status(councilTax),
     epc: status(epc),
-    maps: maps ? 'ok' : 'unavailable',
+    maps: hasMaps ? 'ok' : 'unavailable',
   };
 
   const publicData: PublicData = {
@@ -144,9 +152,10 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(flood ? { flood } : {}),
     ...(pricePaid ? { pricePaid } : {}),
     ...(planning ? { planning } : {}),
+    ...(planningApplications ? { planningApplications } : {}),
     ...(councilTax ? { councilTax } : {}),
     ...(epc ? { epc } : {}),
-    ...(maps ? { maps } : {}),
+    ...(hasMaps ? { maps } : {}),
     demographics,
   };
 

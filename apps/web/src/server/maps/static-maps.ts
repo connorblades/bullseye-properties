@@ -105,3 +105,41 @@ export function buildMapLayers(input: MapInputs): MapLayers | undefined {
 
   return { amenities: amenitiesUrl, flood: floodUrl, crime: crimeUrl };
 }
+
+// HMLR INSPIRE cadastral-parcel (title boundary) WMS. No token needed.
+const HMLR_WMS = 'https://inspire.landregistry.gov.uk/inspire/ows';
+
+/**
+ * Title-boundary map: a Mapbox aerial base + an HMLR INSPIRE boundary overlay
+ * for the SAME square bbox, returned as two URLs the UI stacks. The overlay is
+ * a transparent PNG of registered freehold title parcels (so the user can see
+ * whether the property sits on one title or spans/abuts neighbours). The base
+ * needs the Mapbox token; the overlay does not, so we always return the overlay.
+ *
+ * Both images render the same square-in-degrees bbox at the same pixel size, so
+ * they align when stacked. (HMLR's WFS/GetFeatureInfo are disabled, so the
+ * automatic single-vs-multiple-title warning isn't possible from a free source;
+ * this is the visual boundary, per the agreed scope.)
+ */
+export function buildTitleBoundary(lat: number, lng: number): Partial<MapLayers> {
+  const delta = 0.0012; // ~square degree box, ~130m
+  const minLat = (lat - delta).toFixed(6);
+  const maxLat = (lat + delta).toFixed(6);
+  const minLng = (lng - delta).toFixed(6);
+  const maxLng = (lng + delta).toFixed(6);
+  const px = 600;
+
+  // WMS 1.3.0 + EPSG:4326 uses lat,lng axis order.
+  const overlay =
+    `${HMLR_WMS}?service=WMS&version=1.3.0&request=GetMap` +
+    `&layers=inspire:CP.CadastralParcel&styles=&crs=EPSG:4326` +
+    `&bbox=${minLat},${minLng},${maxLat},${maxLng}` +
+    `&width=${px}&height=${px}&format=image/png&transparent=true`;
+
+  const t = token();
+  const base = t
+    ? `${BASE}/satellite-v9/static/[${minLng},${minLat},${maxLng},${maxLat}]/${px}x${px}?access_token=${t}`
+    : undefined;
+
+  return { titleBoundaryOverlay: overlay, ...(base ? { titleBoundaryBase: base } : {}) };
+}
