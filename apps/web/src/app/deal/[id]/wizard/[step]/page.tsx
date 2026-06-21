@@ -17,6 +17,13 @@ import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
 import { pullPublicData } from '@/server/actions/public-data';
+import { publishReport, getLatestDealPackUrl } from '@/server/actions/claude';
+import {
+  SECTION_META,
+  type ReportStreamState,
+  type SectionDraft,
+  type PublishSection,
+} from '@/lib/report-types';
 import { SECTIONS } from '@/lib/sections';
 import { fmtMoney } from '@/lib/utils';
 import {
@@ -43,19 +50,32 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
   const id = params.id;
   const total = SECTIONS.length;
   const step = Math.max(1, Math.min(total, parseInt(params.step, 10)));
-  const [deal, update] = useDeal(id);
+  const [deal, update, { loading }] = useDeal(id);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
   if (!mounted) return null;
 
-  if (!deal) {
+  // While the deal is still being fetched, show a loading state - not the
+  // "not found" card (which previously flashed on every navigation between
+  // wizard steps before the fetch resolved).
+  if (loading || !deal) {
+    if (loading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center px-6">
+          <div className="flex items-center gap-3 text-ink-mid">
+            <Loader2 size={20} className="animate-spin" />
+            <span className="text-sm font-medium">Loading deal...</span>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <div className="card p-10 max-w-md text-center">
           <h2 className="text-xl font-black text-ink mb-3">Deal not found</h2>
-          <p className="text-sm text-ink-mid mb-6">This deal does not exist in local storage. Start a new one.</p>
+          <p className="text-sm text-ink-mid mb-6">This deal could not be found. It may have been removed, or you may not have access to it.</p>
           <button onClick={() => router.push('/deal/new')} className="btn-primary mx-auto">Start a new deal</button>
         </div>
       </div>
@@ -516,7 +536,7 @@ function CouncilTaxManual({ deal, update }: { deal: Deal; update: UpdateFn }) {
 }
 
 function GrowthDriversPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
-  const drivers = deal.growth.drivers;
+  const drivers = deal.growth.drivers ?? [];
 
   const setDriver = (id: string, patch: Partial<GrowthDriver>) => {
     const next = drivers.map((d) => d.id === id ? { ...d, ...patch } : d);
@@ -795,50 +815,224 @@ function OfferPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   );
 }
 
-function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
-  const [generating, setGenerating] = useState(false);
-  const [done, setDone] = useState(false);
+/** Pull [VERIFY: ...] markers out of a narrative for the partner to action. */
+function extractVerifyFlags(text: string): string[] {
+  const flags: string[] = [];
+  const re = /\[VERIFY:\s*([^\]]+)\]/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) flags.push(m[1].trim());
+  return flags;
+}
 
-  const start = () => {
-    setGenerating(true);
-    window.setTimeout(() => { setDone(true); setGenerating(false); }, 1800);
+type GenPhase = 'idle' | 'generating' | 'review' | 'publishing' | 'published';
+
+function SectionEditor({
+  label,
+  draft,
+  value,
+  onChange,
+}: {
+  label: string;
+  draft: SectionDraft;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const flags = extractVerifyFlags(value);
+  return (
+    <div className="rounded-xl border border-black/[0.08] bg-white p-5">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+          {label} &middot; <span className="text-navy">Drafted by AI &mdash; reviewed by you</span>
+        </div>
+        {draft.manualDraft && (
+          <span className="text-[10px] font-bold uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Manual draft</span>
+        )}
+      </div>
+
+      {draft.done ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={Math.max(4, Math.ceil(value.length / 90))}
+          className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm text-ink leading-relaxed focus:outline-none focus:ring-2 focus:ring-navy/30 resize-y"
+        />
+      ) : (
+        <div className="text-sm text-ink leading-relaxed whitespace-pre-wrap min-h-[3rem]">
+          {draft.text}
+          <span className="inline-block w-2 h-4 ml-0.5 align-middle bg-navy/50 animate-pulse" />
+        </div>
+      )}
+
+      {flags.length > 0 && (
+        <div className="mt-3 text-xs text-amber-900 bg-amber-50 rounded-lg px-3 py-2">
+          <span className="font-bold">Verify before publishing:</span>
+          <ul className="list-disc ml-5 mt-1 space-y-0.5">
+            {flags.map((f, i) => <li key={i}>{f}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
+  const [phase, setPhase] = useState<GenPhase>('idle');
+  const [drafts, setDrafts] = useState<ReportStreamState | null>(null);
+  const [edited, setEdited] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const degraded = drafts ? Object.values(drafts).some((d) => d.degraded) : false;
+
+  const start = async () => {
+    setPhase('generating');
+    setError(null);
+    setDrafts(null);
+    setEdited({});
+    try {
+      const resp = await fetch(`/api/deal/${deal.id}/report-stream`, { method: 'POST' });
+      if (!resp.ok || !resp.body) throw new Error('Generation failed to start.');
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let last: ReportStreamState | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const obj = JSON.parse(line) as ReportStreamState | { error: string };
+          if ('error' in obj) throw new Error(obj.error);
+          last = obj;
+          setDrafts({ ...obj });
+        }
+      }
+      if (last) {
+        setEdited(Object.fromEntries(SECTION_META.map(({ key }) => [key, last![key].text])));
+      }
+      setPhase('review');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Generation failed. Please retry.');
+      setPhase('idle');
+    }
   };
 
-  if (done) {
-    return (
-      <div className="card p-10 text-center">
-        <div className="w-16 h-16 mx-auto bg-success-light rounded-2xl flex items-center justify-center text-success-dark mb-5">
-          <CheckCircle2 size={32} />
-        </div>
-        <h2 className="text-2xl font-black text-ink mb-2">Report ready</h2>
-        <p className="text-ink-mid mb-6 max-w-md mx-auto">The Standard Deal Report for {deal.address} has been compiled. Real Claude-powered generation lands in M2.</p>
-        <button onClick={onDone} className="btn-primary mx-auto">Continue to delivery</button>
-      </div>
-    );
-  }
+  const publish = async () => {
+    if (!drafts) return;
+    setPhase('publishing');
+    setError(null);
+    try {
+      const payload: PublishSection[] = SECTION_META.map(({ key }) => ({
+        section: key,
+        raw: drafts[key].raw,
+        edited: edited[key] ?? drafts[key].text,
+        model: drafts[key].model,
+        promptVersionHash: drafts[key].promptVersionHash,
+        inputTokens: drafts[key].inputTokens,
+        outputTokens: drafts[key].outputTokens,
+        manualDraft: drafts[key].manualDraft,
+      }));
+      const res = await publishReport(deal.id, payload);
+      if (res.renderError) {
+        setError(`Draft published, but the PDF render failed: ${res.renderError}. You can continue and retry the render from delivery.`);
+      }
+      setPhase('published');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Publish failed. Please retry.');
+      setPhase('review');
+    }
+  };
+
+  const busy = phase === 'generating' || phase === 'publishing';
 
   return (
-    <div className="card p-10 text-center">
-      <div className="w-16 h-16 mx-auto bg-navy/[0.08] rounded-2xl flex items-center justify-center text-navy mb-5">
-        {generating ? <Loader2 size={28} className="animate-spin" /> : <Sparkles size={28} />}
+    <div className="card p-8">
+      <div className="flex items-start gap-4 mb-5">
+        <div className="w-12 h-12 shrink-0 bg-navy/[0.08] rounded-2xl flex items-center justify-center text-navy">
+          {busy ? <Loader2 size={24} className="animate-spin" /> : phase === 'published' ? <CheckCircle2 size={24} /> : <Sparkles size={24} />}
+        </div>
+        <div>
+          <h2 className="text-2xl font-black text-ink mb-1">
+            {phase === 'generating' && 'Drafting the five narrative sections...'}
+            {phase === 'review' && 'Review and edit the draft'}
+            {phase === 'publishing' && 'Publishing...'}
+            {phase === 'published' && 'Report published'}
+            {phase === 'idle' && 'Generate the Standard Deal Report'}
+          </h2>
+          <p className="text-sm text-ink-mid max-w-xl">
+            Claude will draft the five narrative sections from your inputs. You can edit each before publishing.
+          </p>
+        </div>
       </div>
-      <h2 className="text-2xl font-black text-ink mb-3">{generating ? 'Generating report...' : 'Ready to generate'}</h2>
-      <p className="text-ink-mid mb-6 max-w-md mx-auto">
-        {generating ? 'Compiling 16 sections, evidence, photos, growth drivers and equity projection into a branded PDF.' : 'All stages complete. Compile the Standard Deal Report. Placeholder for M1: real Claude generation arrives in M2.'}
-      </p>
-      {!generating && (
-        <button onClick={start} className="btn-primary mx-auto">Generate Standard Deal Report</button>
+
+      {error && (
+        <div className="flex items-start gap-2 bg-red-50 text-red-800 text-sm rounded-lg px-4 py-3 mb-4">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
       )}
+
+      {degraded && (
+        <div className="flex items-start gap-2 bg-amber-50 text-amber-900 text-sm rounded-lg px-4 py-3 mb-4">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <span>AI service degraded &mdash; drafts may need extra review.</span>
+        </div>
+      )}
+
+      {drafts && (
+        <div className="space-y-4 mb-6">
+          {SECTION_META.map(({ key, label }) => (
+            <SectionEditor
+              key={key}
+              label={label}
+              draft={drafts[key]}
+              value={edited[key] ?? drafts[key].text}
+              onChange={(v) => setEdited((prev) => ({ ...prev, [key]: v }))}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        {(phase === 'idle' || phase === 'review') && (
+          <button onClick={start} disabled={busy} className="btn-secondary disabled:opacity-50">
+            {phase === 'review' ? 'Regenerate all' : 'Generate Standard Deal Report'}
+          </button>
+        )}
+        {phase === 'review' && (
+          <button onClick={publish} className="btn-primary">Publish report</button>
+        )}
+        {phase === 'published' && (
+          <button onClick={onDone} className="btn-primary inline-flex items-center gap-1.5">
+            <CheckCircle2 size={16} /> Continue to delivery
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 function DeliverPanel({ deal }: { deal: Deal }) {
   const shareUrl = `app.bullseyeproperties.co.uk/r/${deal.id}/${deal.id.slice(-6)}`;
-  const pdfName = (deal.address.split(',')[0] || 'Property').replace(/[^a-zA-Z0-9]/g, '_') + '_Deal_Pack.pdf';
+  const [pdf, setPdf] = useState<{ url: string; version: number; filename: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getLatestDealPackUrl(deal.id)
+      .then((r) => { if (!cancelled) setPdf(r); })
+      .catch(() => { if (!cancelled) setPdf(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [deal.id]);
+
   return (
     <div className="card p-8">
-      <div className="text-sm font-bold text-success bg-success-light inline-block px-3 py-1.5 rounded mb-4">Report ready</div>
+      <div className="text-sm font-bold text-success bg-success-light inline-block px-3 py-1.5 rounded mb-4">
+        {pdf ? `Report ready · v${pdf.version}` : 'Report'}
+      </div>
       <h2 className="text-xl font-black text-ink mb-5">Send to {deal.client || '(no client yet)'}</h2>
       <div className="space-y-3 mb-6">
         <div className="flex items-center justify-between p-4 bg-bg rounded-lg">
@@ -846,17 +1040,32 @@ function DeliverPanel({ deal }: { deal: Deal }) {
             <div className="font-bold text-ink text-sm">Shareable link</div>
             <div className="text-xs text-ink-mid font-mono">{shareUrl}</div>
           </div>
-          <button className="btn-secondary text-xs">Copy</button>
+          <button
+            onClick={() => navigator.clipboard?.writeText(shareUrl)}
+            className="btn-secondary text-xs"
+          >
+            Copy
+          </button>
         </div>
         <div className="flex items-center justify-between p-4 bg-bg rounded-lg">
           <div>
             <div className="font-bold text-ink text-sm">PDF download</div>
-            <div className="text-xs text-ink-mid">{pdfName}</div>
+            <div className="text-xs text-ink-mid">
+              {loading ? 'Locating latest report...' : pdf ? pdf.filename : 'No rendered report yet. Generate one in Stage 14.'}
+            </div>
           </div>
-          <button className="btn-secondary text-xs">Download</button>
+          {pdf ? (
+            <a href={pdf.url} target="_blank" rel="noopener noreferrer" download={pdf.filename} className="btn-secondary text-xs">
+              Download
+            </a>
+          ) : (
+            <button disabled className="btn-secondary text-xs opacity-50">Download</button>
+          )}
         </div>
       </div>
-      <p className="text-xs text-ink-muted italic mb-4">Delivery flow placeholder. M2 ships real share link generation, engagement analytics, and partner-led delivery prompts.</p>
+      <p className="text-xs text-ink-muted italic mb-4">
+        Tracked share links, engagement analytics and partner-led delivery prompts land in M4. The PDF link above is a short-lived signed download.
+      </p>
       <button className="btn-primary">Email to client</button>
     </div>
   );
