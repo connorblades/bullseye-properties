@@ -98,12 +98,10 @@ export type HpiInfo = {
 export type MapLayers = {
   amenities?: string;         // Mapbox static image URL
   crime?: string;
-  // Flood + title boundary are composites: a Mapbox aerial base + a government
-  // WMS overlay (transparent PNG) for the same bbox, stacked in the UI.
+  // Flood is a composite: a Mapbox aerial base + the EA flood-zone WMS overlay
+  // (transparent PNG) for the same bbox, stacked in the UI.
   floodBase?: string;
   floodOverlay?: string;      // EA flood-zone polygons (shaded risk area)
-  titleBoundaryBase?: string;
-  titleBoundaryOverlay?: string;
 };
 
 // planning.data.gov.uk gives designations; PlanIt gives actual applications.

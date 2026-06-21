@@ -138,22 +138,7 @@ export function buildFloodMap(lat: number, lng: number): Partial<MapLayers> {
   return { floodOverlay: overlay, ...(base ? { floodBase: base } : {}) };
 }
 
-// HMLR INSPIRE cadastral-parcel (title boundary) WMS. No token needed.
-const HMLR_WMS = 'https://inspire.landregistry.gov.uk/inspire/ows';
-
-/**
- * Title-boundary map: a Mapbox aerial base + an HMLR INSPIRE boundary overlay
- * for the SAME square bbox, returned as two URLs the UI stacks. The overlay is
- * a transparent PNG of registered freehold title parcels (so the user can see
- * whether the property sits on one title or spans/abuts neighbours). The base
- * needs the Mapbox token; the overlay does not, so we always return the overlay.
- *
- * Both images render the same square-in-degrees bbox at the same pixel size, so
- * they align when stacked. (HMLR's WFS/GetFeatureInfo are disabled, so the
- * automatic single-vs-multiple-title warning isn't possible from a free source;
- * this is the visual boundary, per the agreed scope.)
- */
-export function buildTitleBoundary(lat: number, lng: number): Partial<MapLayers> {
-  const { base, overlay } = bboxBaseOverlay(lat, lng, 0.0012, HMLR_WMS, 'inspire:CP.CadastralParcel');
-  return { titleBoundaryOverlay: overlay, ...(base ? { titleBoundaryBase: base } : {}) };
-}
+// HMLR INSPIRE title-boundary map was removed: its WMS rendering dumped parcel
+// labels and wasn't controllable. The legal title is paid HMLR data - the UI
+// links out to buy it instead (see TitleRegisterLink). Property context is the
+// OS map.

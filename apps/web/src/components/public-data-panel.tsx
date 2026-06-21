@@ -7,7 +7,7 @@ import type {
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
-  CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, Map as MapIcon,
+  CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, Map as MapIcon, ExternalLink,
 } from 'lucide-react';
 
 function fmtGBP(n: number): string {
@@ -284,14 +284,29 @@ export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[]
   );
 }
 
-export function TitleBoundaryMap({ maps }: { maps: MapLayers }) {
+/**
+ * The legal title register + plan is paid HMLR data (no free API), so we link
+ * straight to HMLR's "Search for land and property information" service where a
+ * sourcer can buy the official copy (~GBP 7) for the exact address.
+ */
+export function TitleRegisterLink({ postcode }: { postcode?: string }) {
+  const href = 'https://search-property-information.landregistry.gov.uk/';
   return (
-    <StackedMap
-      base={maps.titleBoundaryBase}
-      overlay={maps.titleBoundaryOverlay}
-      label="Title boundaries (HM Land Registry INSPIRE)"
-      icon={<MapIcon size={12} />}
-    />
+    <div className="bg-bg rounded-lg p-4 flex items-start justify-between gap-4">
+      <div className="flex items-start gap-2">
+        <MapIcon size={15} className="text-navy mt-0.5" />
+        <div>
+          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">Title register & plan</div>
+          <div className="text-xs text-ink-mid mt-1">
+            The legal title (registered owner, tenure, charges, covenants) is paid HM Land Registry data.
+            Buy the official copy for {postcode || 'this address'} direct from HMLR.
+          </div>
+        </div>
+      </div>
+      <a href={href} target="_blank" rel="noreferrer" className="btn-secondary text-xs inline-flex items-center gap-1.5 flex-shrink-0">
+        Buy from HMLR <ExternalLink size={13} />
+      </a>
+    </div>
   );
 }
 
@@ -304,12 +319,12 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
     <div className="space-y-4">
       <SourceStatusGrid data={data} />
       {data.maps && <MapsRow maps={data.maps} />}
-      {data.maps && (data.maps.floodOverlay || data.maps.titleBoundaryOverlay) && (
+      {data.maps?.floodOverlay && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {data.maps.floodOverlay && <FloodAreaMap maps={data.maps} />}
-          {data.maps.titleBoundaryOverlay && <TitleBoundaryMap maps={data.maps} />}
+          <FloodAreaMap maps={data.maps} />
         </div>
       )}
+      <TitleRegisterLink postcode={data.postcode} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {data.flood && <FloodCard flood={data.flood} />}
         {data.epc && <EpcCard epc={data.epc} />}

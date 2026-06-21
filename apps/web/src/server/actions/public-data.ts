@@ -29,7 +29,7 @@ import { fetchPlanning } from '@/server/public-data/planning';
 import { fetchPlanningApplications } from '@/server/public-data/planning-applications';
 import { fetchEpc } from '@/server/public-data/epc';
 import { lookupCompany } from '@/server/public-data/companies';
-import { buildMapLayers, buildFloodMap, buildTitleBoundary } from '@/server/maps/static-maps';
+import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
 import type { VendorCompany } from '@/lib/deal-store';
 
 function status(v: unknown): PublicDataStatus {
@@ -119,8 +119,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     crimeTotal: crime?.total12mo ?? 0,
   });
   const floodMap = buildFloodMap(geo.lat, geo.lng);
-  const titleBoundary = buildTitleBoundary(geo.lat, geo.lng);
-  const maps = { ...(baseMaps ?? {}), ...floodMap, ...titleBoundary };
+  const maps = { ...(baseMaps ?? {}), ...floodMap };
   const hasMaps = Object.keys(maps).length > 0;
 
   const statusMap: Partial<Record<PublicDataSourceKey, PublicDataStatus>> = {
