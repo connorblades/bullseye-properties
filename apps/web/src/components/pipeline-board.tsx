@@ -93,7 +93,7 @@ export function PipelineBoard() {
               <div className="space-y-3">
                 {col.key === 'leads' && (
                   <Link
-                    href="/deal/new"
+                    href="/lead/new"
                     className="flex items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-black/[0.1] py-3 text-xs font-bold text-ink-muted hover:border-navy/30 hover:text-navy transition"
                   >
                     <Plus size={14} /> Add lead
