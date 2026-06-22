@@ -88,6 +88,12 @@ export type FloodInfo = {
   source: string;
 };
 
+// HMLR INSPIRE: freehold plot boundary polygon (WGS84 GeoJSON geometry).
+export type BoundaryInfo = {
+  inspireId?: string;
+  geojson: { type: string; coordinates: unknown };
+};
+
 // Ofcom Connected Nations: fixed-broadband coverage at the postcode.
 export type BroadbandInfo = {
   maxDownloadMbps?: number;
@@ -281,7 +287,7 @@ export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
   | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
-  | 'riverLevels' | 'landOwnership' | 'broadband';
+  | 'riverLevels' | 'landOwnership' | 'broadband' | 'boundary';
 
 export type PublicData = {
   postcode: string;
@@ -306,6 +312,7 @@ export type PublicData = {
   riverLevels?: RiverLevelInfo;
   landOwnership?: LandOwnershipInfo;
   broadband?: BroadbandInfo;
+  boundary?: BoundaryInfo;
 };
 
 export type DocumentKind = 'floor-plan' | 'title-plan' | 'epc' | 'land-registry' | 'other';

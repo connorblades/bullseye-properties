@@ -149,6 +149,7 @@ export function buildDealContext(deal: Deal): string {
       ].filter(Boolean);
       if (parts.length) push('Broadband (Ofcom)', parts.join(', '));
     }
+    if (pd.boundary?.inspireId) push('Plot boundary', 'HMLR INSPIRE freehold boundary on file');
     if (pd.planning) {
       if (pd.planning.conservationArea) lines.push('In a conservation area.');
       if (pd.planning.listed) lines.push('Listed building designation present.');

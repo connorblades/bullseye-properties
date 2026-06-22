@@ -34,7 +34,7 @@ const SOURCE_LABEL: Record<string, string> = {
   pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
   schools: 'Schools', areaStats: 'Population & jobs', airQuality: 'Air quality',
   councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
-  landOwnership: 'Land ownership', broadband: 'Broadband',
+  landOwnership: 'Land ownership', broadband: 'Broadband', boundary: 'Plot boundary',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
