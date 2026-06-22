@@ -79,16 +79,49 @@ const outwardArea = (postcode: string): string => {
   return m ? m[1] : '';
 };
 
-function buildProprietors(get: (h: string) => string): CorporateOwner[] {
+/** First header index whose name contains all keywords (case-insensitive). */
+function findCol(header: string[], ...keywords: string[]): number {
+  return header.findIndex((h) => {
+    const l = h.toLowerCase();
+    return keywords.every((k) => l.includes(k));
+  });
+}
+
+type ResolvedCols = {
+  postcode: number; title: number; tenure: number; address: number; district: number; pricePaid: number;
+  names: number[]; regs: number[]; cats: number[]; countries: number[];
+};
+
+/** Resolve CCOD/OCOD columns tolerantly (header names vary between releases). */
+export function resolveColumns(header: string[]): ResolvedCols {
+  const numbered = (kw: string) => [1, 2, 3, 4].map((n) => findCol(header, kw, `(${n})`));
+  const titleNum = findCol(header, 'title', 'number');
+  const propAddr = findCol(header, 'property', 'address');
+  return {
+    postcode: findCol(header, 'postcode'),
+    title: titleNum >= 0 ? titleNum : findCol(header, 'title'),
+    tenure: findCol(header, 'tenure'),
+    address: propAddr >= 0 ? propAddr : findCol(header, 'address'),
+    district: findCol(header, 'district'),
+    pricePaid: findCol(header, 'price', 'paid'),
+    names: numbered('proprietor name'),
+    regs: numbered('company registration'),
+    cats: numbered('proprietorship category'),
+    countries: numbered('country incorporated'),
+  };
+}
+
+function buildProprietors(cols: string[], R: ResolvedCols): CorporateOwner[] {
+  const get = (i: number) => (i >= 0 ? (cols[i] ?? '').trim() : '');
   const owners: CorporateOwner[] = [];
-  for (let n = 1; n <= 4; n++) {
-    const name = get(`Proprietor Name (${n})`);
+  for (let n = 0; n < 4; n++) {
+    const name = get(R.names[n]);
     if (!name) continue;
     owners.push({
       name,
-      companyRegNo: get(`Company Registration No. (${n})`) || undefined,
-      category: get(`Proprietorship Category (${n})`) || undefined,
-      country: get(`Country Incorporated (${n})`) || undefined,
+      companyRegNo: get(R.regs[n]) || undefined,
+      category: get(R.cats[n]) || undefined,
+      country: get(R.countries[n]) || undefined,
     });
   }
   return owners;
@@ -134,7 +167,7 @@ export async function ingestDataset(
   const decoder = new TextDecoder();
   let buf = '';
   let header: string[] | null = null;
-  let idx: Record<string, number> = {};
+  let R: ResolvedCols | null = null;
   const stats: IngestStats = { dataset, scanned: 0, matched: 0, upserted: 0 };
   let batch: (typeof landOwnership.$inferInsert)[] = [];
 
@@ -162,26 +195,29 @@ export async function ingestDataset(
   const handleRow = (cols: string[]) => {
     if (!header) {
       header = cols.map((h) => h.trim());
-      idx = Object.fromEntries(header.map((h, i) => [h, i]));
+      R = resolveColumns(header);
+      log(`${dataset} header (${header.length} cols): ${header.join(' | ').slice(0, 600)}`);
+      log(`${dataset} resolved -> postcode:${R.postcode} title:${R.title} name1:${R.names[0]} pricePaid:${R.pricePaid}`);
+      if (R.postcode < 0) log(`WARNING: no postcode column detected in ${dataset} - header may be unreadable (gzip?)`);
       return;
     }
     stats.scanned++;
-    const get = (h: string) => (idx[h] != null ? (cols[idx[h]] ?? '').trim() : '');
-    const postcode = normalisePostcode(get('Postcode'));
+    const get = (i: number) => (i >= 0 ? (cols[i] ?? '').trim() : '');
+    const postcode = normalisePostcode(get(R!.postcode));
     if (!postcode || !INGEST_POSTCODE_AREAS.includes(outwardArea(postcode))) return;
-    const titleNumber = get('Title Number');
+    const titleNumber = get(R!.title);
     if (!titleNumber) return;
-    const proprietors = buildProprietors(get);
-    const priceStr = get('Price Paid').replace(/[^0-9]/g, '');
+    const proprietors = buildProprietors(cols, R!);
+    const priceStr = get(R!.pricePaid).replace(/[^0-9]/g, '');
     stats.matched++;
     batch.push({
       id: `${dataset}:${titleNumber}`,
       dataset,
       titleNumber,
-      tenure: get('Tenure') || null,
+      tenure: get(R!.tenure) || null,
       postcode,
-      address: get('Property Address') || null,
-      district: get('District') || null,
+      address: get(R!.address) || null,
+      district: get(R!.district) || null,
       pricePaid: priceStr ? Number(priceStr) : null,
       proprietors,
     });
