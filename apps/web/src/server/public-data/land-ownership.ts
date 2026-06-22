@@ -127,6 +127,80 @@ function buildProprietors(cols: string[], R: ResolvedCols): CorporateOwner[] {
   return owners;
 }
 
+/**
+ * Decode an HMLR download stream to plain bytes, handling gzip (1f 8b), ZIP
+ * (PK 03 04 - single deflate/stored entry) and plain CSV - all streamed, never
+ * buffering the multi-GB file. ZIP support is needed because HMLR serves CCOD/
+ * OCOD/INSPIRE as .zip, which fetch does not unpack.
+ */
+async function decodeDownloadStream(
+  body: ReadableStream<Uint8Array>,
+  label: string,
+  log: (m: string) => void,
+): Promise<ReadableStream<Uint8Array>> {
+  const reader = body.getReader();
+  let buf = new Uint8Array(0);
+  const append = (chunk: Uint8Array) => {
+    const next = new Uint8Array(buf.length + chunk.length);
+    next.set(buf);
+    next.set(chunk, buf.length);
+    buf = next;
+  };
+  const readMore = async (): Promise<boolean> => {
+    const { done, value } = await reader.read();
+    if (done) return false;
+    if (value) append(value);
+    return true;
+  };
+
+  while (buf.length < 4 && (await readMore())) { /* gather magic */ }
+  const gzip = buf[0] === 0x1f && buf[1] === 0x8b;
+  const zip = buf[0] === 0x50 && buf[1] === 0x4b;
+  log(`${label} download format: ${zip ? 'zip' : gzip ? 'gzip' : 'plain'}`);
+
+  const sourceFrom = (head: Uint8Array, bound: number): ReadableStream<Uint8Array> => {
+    let remaining = bound; // Infinity = until source ends
+    return new ReadableStream<Uint8Array>({
+      start(c) {
+        let take = head;
+        if (Number.isFinite(remaining) && take.length > remaining) take = take.subarray(0, remaining);
+        if (take.length) c.enqueue(take);
+        remaining -= take.length;
+        if (remaining <= 0) c.close();
+      },
+      async pull(c) {
+        if (remaining <= 0) return c.close();
+        const { done, value } = await reader.read();
+        if (done) return c.close();
+        let take = value!;
+        if (Number.isFinite(remaining) && take.length > remaining) take = take.subarray(0, remaining);
+        if (take.length) c.enqueue(take);
+        remaining -= take.length;
+        if (remaining <= 0) c.close();
+      },
+      cancel() {
+        void reader.cancel();
+      },
+    });
+  };
+
+  if (gzip) return sourceFrom(buf, Infinity).pipeThrough(new DecompressionStream('gzip'));
+  if (!zip) return sourceFrom(buf, Infinity);
+
+  // ZIP local file header: parse method + sizes, then stream the first entry.
+  while (buf.length < 30 && (await readMore())) { /* header */ }
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const method = dv.getUint16(8, true); // 0 = stored, 8 = deflate
+  const compSize = dv.getUint32(18, true);
+  const nameLen = dv.getUint16(26, true);
+  const extraLen = dv.getUint16(28, true);
+  const dataStart = 30 + nameLen + extraLen;
+  while (buf.length < dataStart && (await readMore())) { /* name + extra */ }
+  const entry = sourceFrom(buf.subarray(dataStart), compSize > 0 ? compSize : Infinity);
+  log(`${label} zip entry: method=${method} compSize=${compSize}`);
+  return method === 0 ? entry : entry.pipeThrough(new DecompressionStream('deflate-raw'));
+}
+
 type IngestStats = { dataset: string; scanned: number; matched: number; upserted: number };
 
 /**
@@ -163,30 +237,9 @@ export async function ingestDataset(
   const res = await fetch(downloadUrl);
   if (!res.ok || !res.body) throw new Error(`Download failed: HTTP ${res.status}`);
 
-  // HMLR may serve the CSV gzip-compressed (a .csv.gz body), which fetch does
-  // NOT auto-decompress. Peek the first 2 bytes for the gzip magic (1f 8b) and
-  // stream-decompress if needed - never buffer the whole (multi-GB) file.
-  const rawReader = res.body.getReader();
-  const firstChunk = await rawReader.read();
-  const head = firstChunk.value;
-  const isGzip = !!head && head.length >= 2 && head[0] === 0x1f && head[1] === 0x8b;
-  log(`${dataset} download: gzip=${isGzip}`);
-  const source = new ReadableStream<Uint8Array>({
-    start(controller) {
-      if (head) controller.enqueue(head);
-      if (firstChunk.done) controller.close();
-    },
-    async pull(controller) {
-      const { done, value } = await rawReader.read();
-      if (done) controller.close();
-      else if (value) controller.enqueue(value);
-    },
-    cancel() {
-      void rawReader.cancel();
-    },
-  });
-  const decoded = isGzip ? source.pipeThrough(new DecompressionStream('gzip')) : source;
-  const reader = decoded.getReader();
+  // HMLR serves CCOD/OCOD as .zip (and could gzip); decode the stream without
+  // buffering the multi-GB file.
+  const reader = (await decodeDownloadStream(res.body, dataset, log)).getReader();
   const decoder = new TextDecoder();
   let buf = '';
   let header: string[] | null = null;
