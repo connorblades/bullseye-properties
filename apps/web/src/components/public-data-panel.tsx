@@ -4,12 +4,12 @@ import dynamic from 'next/dynamic';
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
-  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo, LandOwnershipInfo,
+  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo, LandOwnershipInfo, BroadbandInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
-  GraduationCap, Building2, Wind, Waves,
+  GraduationCap, Building2, Wind, Waves, Wifi,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -34,7 +34,7 @@ const SOURCE_LABEL: Record<string, string> = {
   pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
   schools: 'Schools', areaStats: 'Population & jobs', airQuality: 'Air quality',
   councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
-  landOwnership: 'Land ownership',
+  landOwnership: 'Land ownership', broadband: 'Broadband',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -109,6 +109,33 @@ export function LandOwnershipCard({ owned }: { owned: LandOwnershipInfo }) {
       <p className="text-[10px] text-ink-muted mt-2">
         Company-owned titles at this postcode (HMLR CCOD/OCOD, free). Individual owners are not in the open data.
       </p>
+    </Card>
+  );
+}
+
+export function BroadbandCard({ bb }: { bb: BroadbandInfo }) {
+  const pct = (v?: number) => (v == null ? '—' : `${v.toFixed(0)}%`);
+  return (
+    <Card icon={<Wifi size={15} className="text-navy" />} title="Broadband (Ofcom)">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Max download</div>
+          <div className="text-sm font-bold text-ink">{bb.maxDownloadMbps != null ? `${bb.maxDownloadMbps} Mbit/s` : '—'}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Full fibre</div>
+          <div className="text-sm font-bold text-ink">{pct(bb.fullFibrePct)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Superfast</div>
+          <div className="text-sm text-ink">{pct(bb.superfastPct)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Ultrafast</div>
+          <div className="text-sm text-ink">{pct(bb.ultrafastPct)}</div>
+        </div>
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">Source: {bb.source}</p>
     </Card>
   );
 }
@@ -504,6 +531,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
         {data.flood && <FloodCard flood={data.flood} />}
         {data.riverLevels && <RiverLevelsCard rivers={data.riverLevels} />}
         {data.landOwnership && <LandOwnershipCard owned={data.landOwnership} />}
+        {data.broadband && <BroadbandCard bb={data.broadband} />}
         {data.epc && <EpcCard epc={data.epc} />}
         {data.hpi && <HpiCard hpi={data.hpi} />}
         {data.areaStats && <AreaStatsCard stats={data.areaStats} />}

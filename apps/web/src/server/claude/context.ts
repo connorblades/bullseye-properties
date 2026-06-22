@@ -141,6 +141,14 @@ export function buildDealContext(deal: Deal): string {
       const unique = Array.from(new Set(names)).slice(0, 5);
       if (unique.length) push('Corporate owners at postcode (HMLR)', unique.join('; '));
     }
+    if (pd.broadband) {
+      const b = pd.broadband;
+      const parts = [
+        b.maxDownloadMbps != null ? `max ${b.maxDownloadMbps} Mbit/s` : null,
+        b.fullFibrePct != null ? `full fibre ${b.fullFibrePct.toFixed(0)}%` : null,
+      ].filter(Boolean);
+      if (parts.length) push('Broadband (Ofcom)', parts.join(', '));
+    }
     if (pd.planning) {
       if (pd.planning.conservationArea) lines.push('In a conservation area.');
       if (pd.planning.listed) lines.push('Listed building designation present.');

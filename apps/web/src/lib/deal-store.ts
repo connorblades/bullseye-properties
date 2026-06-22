@@ -88,6 +88,16 @@ export type FloodInfo = {
   source: string;
 };
 
+// Ofcom Connected Nations: fixed-broadband coverage at the postcode.
+export type BroadbandInfo = {
+  maxDownloadMbps?: number;
+  superfastPct?: number;    // % premises >= 30 Mbit/s
+  ultrafastPct?: number;    // % premises >= 300 Mbit/s
+  fullFibrePct?: number;    // % premises with FTTP
+  premises?: number;
+  source: string;
+};
+
 // HMLR CCOD/OCOD: company owners of property at the postcode (free; corporate
 // owners only - individuals are not in the free datasets).
 export type CorporateOwner = {
@@ -271,7 +281,7 @@ export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
   | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
-  | 'riverLevels' | 'landOwnership';
+  | 'riverLevels' | 'landOwnership' | 'broadband';
 
 export type PublicData = {
   postcode: string;
@@ -295,6 +305,7 @@ export type PublicData = {
   maps?: MapLayers;
   riverLevels?: RiverLevelInfo;
   landOwnership?: LandOwnershipInfo;
+  broadband?: BroadbandInfo;
 };
 
 export type DocumentKind = 'floor-plan' | 'title-plan' | 'epc' | 'land-registry' | 'other';

@@ -284,6 +284,28 @@ export const landOwnership = pgTable(
   })
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Broadband coverage (Ofcom Connected Nations) - tenant-agnostic reference data,
+// ingested from the free Ofcom fixed-broadband postcode dataset, queried by
+// postcode. Server-only: RLS on with no policies; direct connection bypasses it.
+// ─────────────────────────────────────────────────────────────────────────────
+export const broadbandCoverage = pgTable(
+  'broadband_coverage',
+  {
+    id: text('id').primaryKey(), // normalised postcode
+    postcode: text('postcode').notNull(),
+    maxDownloadMbps: integer('max_download_mbps'),
+    superfastPct: numeric('superfast_pct', { precision: 5, scale: 1 }),
+    ultrafastPct: numeric('ultrafast_pct', { precision: 5, scale: 1 }),
+    fullFibrePct: numeric('full_fibre_pct', { precision: 5, scale: 1 }),
+    premises: integer('premises'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    postcodeIdx: index('broadband_coverage_postcode_idx').on(table.postcode),
+  })
+);
+
 // Inferred types for application code
 export type Tenant = typeof tenants.$inferSelect;
 export type PublicDataCacheRow = typeof publicDataCache.$inferSelect;
