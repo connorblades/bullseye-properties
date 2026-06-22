@@ -6,6 +6,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { listDeals, type Deal } from '@/lib/deal-store';
 import { updateDealById } from '@/server/actions/deals';
 import { PIPELINE_COLUMNS, effectivePipelineStage, type PipelineColumnKey } from '@/lib/pipeline';
+import { scoreLeadFit } from '@/lib/lead-score';
 import { SECTIONS } from '@/lib/sections';
 
 const TONE_BADGE: Record<string, string> = {
@@ -105,14 +106,27 @@ export function PipelineBoard() {
                   </div>
                 )}
 
-                {items.map((d) => (
+                {items.map((d) => {
+                  const fit = scoreLeadFit(d);
+                  const fitTone = fit.pct >= 75 ? 'text-success bg-success-light' : fit.pct >= 50 ? 'text-amber-700 bg-amber-50' : 'text-red-600 bg-red-50';
+                  return (
                   <div key={d.id} className="card p-4">
                     <Link
                       href={d.delivered ? `/deal/${d.id}/wizard/15` : `/deal/${d.id}/wizard/${d.progress}`}
                       className="block hover:opacity-80 transition"
                     >
-                      <div className="font-bold text-ink text-sm leading-snug mb-1">
-                        {d.address || '(no address yet)'}
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="font-bold text-ink text-sm leading-snug">
+                          {d.address || '(no address yet)'}
+                        </div>
+                        {fit.applicable > 0 && (
+                          <span
+                            className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${fitTone}`}
+                            title={fit.reasons.map((r) => `${r.ok ? '✓' : '✗'} ${r.text}`).join('\n')}
+                          >
+                            {fit.pct}% fit
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-ink-mid mb-3">For {d.client || '(no client yet)'}</div>
                       <div className="flex items-center justify-between mb-3">
@@ -153,7 +167,8 @@ export function PipelineBoard() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
