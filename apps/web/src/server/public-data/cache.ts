@@ -19,7 +19,7 @@ export type CacheSource =
   | 'geocode' | 'hpi' | 'crime' | 'flood' | 'amenities'
   | 'pricePaid' | 'planning' | 'planningApplications' | 'schools'
   | 'areaStats' | 'airQuality'
-  | 'councilTax' | 'epc' | 'companies' | 'deprivation' | 'maps';
+  | 'councilTax' | 'epc' | 'companies' | 'deprivation' | 'maps' | 'riverLevels';
 
 export const TTL = {
   hour: 60 * 60 * 1000,

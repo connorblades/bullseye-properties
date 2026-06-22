@@ -4,12 +4,12 @@ import dynamic from 'next/dynamic';
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
-  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo,
+  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
-  GraduationCap, Building2, Wind,
+  GraduationCap, Building2, Wind, Waves,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -33,7 +33,7 @@ const SOURCE_LABEL: Record<string, string> = {
   crime: 'Crime', flood: 'Flood risk', amenities: 'Amenities',
   pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
   schools: 'Schools', areaStats: 'Population & jobs', airQuality: 'Air quality',
-  councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps',
+  councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -86,6 +86,25 @@ export function FloodCard({ flood }: { flood: FloodInfo }) {
         <p className="text-xs font-bold text-red-600 mt-2">Live EA flood warning active near this location.</p>
       )}
       <p className="text-[10px] text-ink-muted mt-2">Source: {flood.source}</p>
+    </Card>
+  );
+}
+
+export function RiverLevelsCard({ rivers }: { rivers: RiverLevelInfo }) {
+  return (
+    <Card icon={<Waves size={15} className="text-navy" />} title="River-level stations (EA)">
+      <div className="space-y-1.5">
+        {rivers.stations.map((s, i) => (
+          <div key={i} className="flex items-center justify-between text-xs">
+            <span className="text-ink font-semibold">
+              {s.riverName ? `${s.riverName} — ` : ''}{s.label}
+              {s.town ? <span className="text-ink-muted font-normal"> · {s.town}</span> : null}
+            </span>
+            <span className="text-ink-muted">{s.distanceKm} km</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">Source: {rivers.source}</p>
     </Card>
   );
 }
@@ -458,6 +477,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
       <OfficialLinks postcode={data.postcode} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {data.flood && <FloodCard flood={data.flood} />}
+        {data.riverLevels && <RiverLevelsCard rivers={data.riverLevels} />}
         {data.epc && <EpcCard epc={data.epc} />}
         {data.hpi && <HpiCard hpi={data.hpi} />}
         {data.areaStats && <AreaStatsCard stats={data.areaStats} />}

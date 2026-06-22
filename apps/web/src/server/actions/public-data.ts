@@ -30,6 +30,7 @@ import { fetchPlanningApplications } from '@/server/public-data/planning-applica
 import { fetchSchools } from '@/server/public-data/schools';
 import { fetchAreaStats } from '@/server/public-data/census';
 import { fetchAirQuality } from '@/server/public-data/air-quality';
+import { fetchRiverLevels } from '@/server/public-data/river-levels';
 import { fetchEpc } from '@/server/public-data/epc';
 import { lookupCompany } from '@/server/public-data/companies';
 import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
@@ -90,7 +91,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, epc] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, epc] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -102,6 +103,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchSchools(geo.lat, geo.lng),
       fetchAreaStats(geo.lat, geo.lng),
       fetchAirQuality(geo.lat, geo.lng),
+      fetchRiverLevels(geo.postcode, geo.lat, geo.lng),
       fetchEpc(geo.postcode, address),
     ]);
 
@@ -141,6 +143,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     schools: status(schools),
     areaStats: status(areaStats),
     airQuality: status(airQuality),
+    riverLevels: status(riverLevels),
     epc: status(epc),
     maps: hasMaps ? 'ok' : 'unavailable',
   };
@@ -161,6 +164,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(schools ? { schools } : {}),
     ...(areaStats ? { areaStats } : {}),
     ...(airQuality ? { airQuality } : {}),
+    ...(riverLevels ? { riverLevels } : {}),
     ...(epc ? { epc } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,

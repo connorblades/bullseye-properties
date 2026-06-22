@@ -132,6 +132,10 @@ export function buildDealContext(deal: Deal): string {
       push('Employment rate (%)', pd.areaStats.employmentRate);
     }
     if (pd.airQuality) push('Air quality', `${pd.airQuality.band} (AQI ${pd.airQuality.aqi})`);
+    if (pd.riverLevels?.stations?.length) {
+      const s = pd.riverLevels.stations[0];
+      push('Nearest river-level station', `${s.riverName ? `${s.riverName} - ` : ''}${s.label}, ~${s.distanceKm}km`);
+    }
     if (pd.planning) {
       if (pd.planning.conservationArea) lines.push('In a conservation area.');
       if (pd.planning.listed) lines.push('Listed building designation present.');

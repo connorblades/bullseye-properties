@@ -88,6 +88,18 @@ export type FloodInfo = {
   source: string;
 };
 
+// EA real-time flood-monitoring: nearest river-level monitoring stations.
+export type RiverStation = {
+  label: string;
+  riverName?: string;
+  town?: string;
+  distanceKm: number;
+};
+export type RiverLevelInfo = {
+  stations: RiverStation[];   // nearest first
+  source: string;
+};
+
 export type HpiPoint = { month: string; index: number }; // month = YYYY-MM
 export type HpiInfo = {
   district: string;
@@ -238,7 +250,8 @@ export type SchoolInfo = {
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
-  | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps';
+  | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
+  | 'riverLevels';
 
 export type PublicData = {
   postcode: string;
@@ -260,6 +273,7 @@ export type PublicData = {
   councilTax?: CouncilTaxInfo;
   epc?: EpcInfo;
   maps?: MapLayers;
+  riverLevels?: RiverLevelInfo;
 };
 
 export type DocumentKind = 'floor-plan' | 'title-plan' | 'epc' | 'land-registry' | 'other';
