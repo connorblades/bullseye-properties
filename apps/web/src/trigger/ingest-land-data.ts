@@ -1,4 +1,4 @@
-import { task, logger } from '@trigger.dev/sdk/v3';
+import { task, logger } from '@trigger.dev/sdk';
 import { ingestDataset } from '@/server/public-data/land-ownership';
 
 /**
