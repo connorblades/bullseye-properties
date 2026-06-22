@@ -47,6 +47,16 @@ export function PipelineBoard() {
     });
   };
 
+  const setFollowUp = (id: string, date: string) => {
+    // Empty string clears (undefined is skipped by the storage merge).
+    setDeals((prev) => prev.map((d) => (d.id === id ? { ...d, followUpAt: date } : d)));
+    updateDealById(id, { followUpAt: date }).catch(() => {
+      setError('Could not save the follow-up date. Refresh and try again.');
+    });
+  };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   if (loading) {
     return (
       <div className="card p-10 text-center text-ink-muted">
@@ -128,6 +138,20 @@ export function PipelineBoard() {
                         <option key={c.key} value={c.key}>Move to: {c.label}</option>
                       ))}
                     </select>
+                    <div className="mt-2 flex items-center gap-2">
+                      <label className="text-[10px] font-bold text-ink-muted uppercase tracking-wide shrink-0">Follow-up</label>
+                      <input
+                        type="date"
+                        value={d.followUpAt ?? ''}
+                        onChange={(e) => setFollowUp(d.id, e.target.value)}
+                        className={`flex-1 min-w-0 text-xs border rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-navy/30 ${
+                          d.followUpAt && d.followUpAt < todayStr ? 'border-red-300 text-red-600 bg-red-50' : 'border-black/[0.1] text-ink-mid bg-white'
+                        }`}
+                      />
+                      {d.followUpAt && d.followUpAt < todayStr && (
+                        <span className="text-[10px] font-bold text-red-600 shrink-0">Overdue</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

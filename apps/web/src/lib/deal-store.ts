@@ -346,6 +346,12 @@ export type Deal = {
     structure: StageRating;
     notes: string;
     photos: string[];
+    // M5 viewing sub-states: before (prep), on (condition assessment), after
+    // (summary + outcome). `phase` is the partner's current sub-state.
+    phase?: 'pre' | 'on' | 'post';
+    prep?: string;
+    summary?: string;
+    outcome?: 'proceed' | 'pass' | 'undecided' | '';
   };
 
   growth: {
@@ -420,7 +426,7 @@ export function emptyDeal(id: string, initial: Partial<Deal> = {}): Deal {
     salesComps: [],
     rentalComps: [],
     auction: { isAuction: false, buyerFees: '', specialConditions: '', restrictiveCovenants: '' },
-    viewing: { roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '', notes: '', photos: [] },
+    viewing: { roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '', notes: '', photos: [], phase: 'pre', prep: '', summary: '', outcome: '' },
     growth: {
       capitalGrowthPct: '3.0',
       rentalGrowthPct: '2.0',
