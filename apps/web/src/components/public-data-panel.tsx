@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
-  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo,
+  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo, LandOwnershipInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
@@ -34,6 +34,7 @@ const SOURCE_LABEL: Record<string, string> = {
   pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
   schools: 'Schools', areaStats: 'Population & jobs', airQuality: 'Air quality',
   councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
+  landOwnership: 'Land ownership',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -86,6 +87,28 @@ export function FloodCard({ flood }: { flood: FloodInfo }) {
         <p className="text-xs font-bold text-red-600 mt-2">Live EA flood warning active near this location.</p>
       )}
       <p className="text-[10px] text-ink-muted mt-2">Source: {flood.source}</p>
+    </Card>
+  );
+}
+
+export function LandOwnershipCard({ owned }: { owned: LandOwnershipInfo }) {
+  return (
+    <Card icon={<Landmark size={15} className="text-navy" />} title="Corporate ownership (HMLR)">
+      <div className="space-y-2">
+        {owned.titles.slice(0, 6).map((t) => (
+          <div key={t.titleNumber} className="text-xs">
+            <div className="font-semibold text-ink">
+              {t.proprietors.map((p) => p.name).join(', ') || 'Company owner'}
+            </div>
+            <div className="text-ink-muted">
+              {t.address ? `${t.address} · ` : ''}{t.tenure ?? ''}{t.proprietors[0]?.companyRegNo ? ` · Co. ${t.proprietors[0].companyRegNo}` : ''}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">
+        Company-owned titles at this postcode (HMLR CCOD/OCOD, free). Individual owners are not in the open data.
+      </p>
     </Card>
   );
 }
@@ -478,6 +501,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {data.flood && <FloodCard flood={data.flood} />}
         {data.riverLevels && <RiverLevelsCard rivers={data.riverLevels} />}
+        {data.landOwnership && <LandOwnershipCard owned={data.landOwnership} />}
         {data.epc && <EpcCard epc={data.epc} />}
         {data.hpi && <HpiCard hpi={data.hpi} />}
         {data.areaStats && <AreaStatsCard stats={data.areaStats} />}

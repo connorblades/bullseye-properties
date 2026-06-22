@@ -88,6 +88,26 @@ export type FloodInfo = {
   source: string;
 };
 
+// HMLR CCOD/OCOD: company owners of property at the postcode (free; corporate
+// owners only - individuals are not in the free datasets).
+export type CorporateOwner = {
+  name: string;
+  companyRegNo?: string;
+  category?: string;     // e.g. "Limited Company or PLC"
+  country?: string;      // for overseas (OCOD)
+};
+export type LandOwnershipTitle = {
+  titleNumber: string;
+  tenure?: string;
+  address?: string;
+  pricePaid?: number;
+  dataset: 'ccod' | 'ocod';
+  proprietors: CorporateOwner[];
+};
+export type LandOwnershipInfo = {
+  titles: LandOwnershipTitle[];   // corporate-owned titles at this postcode
+};
+
 // EA real-time flood-monitoring: nearest river-level monitoring stations.
 export type RiverStation = {
   label: string;
@@ -251,7 +271,7 @@ export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
   | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
-  | 'riverLevels';
+  | 'riverLevels' | 'landOwnership';
 
 export type PublicData = {
   postcode: string;
@@ -274,6 +294,7 @@ export type PublicData = {
   epc?: EpcInfo;
   maps?: MapLayers;
   riverLevels?: RiverLevelInfo;
+  landOwnership?: LandOwnershipInfo;
 };
 
 export type DocumentKind = 'floor-plan' | 'title-plan' | 'epc' | 'land-registry' | 'other';

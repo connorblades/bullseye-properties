@@ -259,6 +259,31 @@ export const publicDataCache = pgTable(
   })
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Land ownership (HMLR CCOD/OCOD corporate ownership) - tenant-agnostic
+// reference data, ingested from the free HMLR datasets and queried by postcode.
+// Server-only: RLS on with no policies; the direct connection bypasses it.
+// ─────────────────────────────────────────────────────────────────────────────
+export const landOwnership = pgTable(
+  'land_ownership',
+  {
+    id: text('id').primaryKey(),
+    dataset: text('dataset').notNull(), // 'ccod' | 'ocod'
+    titleNumber: text('title_number').notNull(),
+    tenure: text('tenure'),
+    postcode: text('postcode'),
+    address: text('address'),
+    district: text('district'),
+    pricePaid: bigint('price_paid', { mode: 'number' }),
+    proprietors: jsonb('proprietors').notNull().default(sql`'[]'::jsonb`),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    postcodeIdx: index('land_ownership_postcode_idx').on(table.postcode),
+    datasetTitleUnique: uniqueIndex('land_ownership_dataset_title_unique').on(table.dataset, table.titleNumber),
+  })
+);
+
 // Inferred types for application code
 export type Tenant = typeof tenants.$inferSelect;
 export type PublicDataCacheRow = typeof publicDataCache.$inferSelect;
