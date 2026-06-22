@@ -163,7 +163,30 @@ export async function ingestDataset(
   const res = await fetch(downloadUrl);
   if (!res.ok || !res.body) throw new Error(`Download failed: HTTP ${res.status}`);
 
-  const reader = res.body.getReader();
+  // HMLR may serve the CSV gzip-compressed (a .csv.gz body), which fetch does
+  // NOT auto-decompress. Peek the first 2 bytes for the gzip magic (1f 8b) and
+  // stream-decompress if needed - never buffer the whole (multi-GB) file.
+  const rawReader = res.body.getReader();
+  const firstChunk = await rawReader.read();
+  const head = firstChunk.value;
+  const isGzip = !!head && head.length >= 2 && head[0] === 0x1f && head[1] === 0x8b;
+  log(`${dataset} download: gzip=${isGzip}`);
+  const source = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (head) controller.enqueue(head);
+      if (firstChunk.done) controller.close();
+    },
+    async pull(controller) {
+      const { done, value } = await rawReader.read();
+      if (done) controller.close();
+      else if (value) controller.enqueue(value);
+    },
+    cancel() {
+      void rawReader.cancel();
+    },
+  });
+  const decoded = isGzip ? source.pipeThrough(new DecompressionStream('gzip')) : source;
+  const reader = decoded.getReader();
   const decoder = new TextDecoder();
   let buf = '';
   let header: string[] | null = null;
