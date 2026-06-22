@@ -437,6 +437,8 @@ export function OfficialLinks({ postcode }: { postcode?: string }) {
     { label: 'Detailed flood risk', sub: 'Rivers, sea, surface water + history', href: 'https://check-long-term-flood-risk.service.gov.uk/postcode' },
     { label: 'Energy certificate (EPC)', sub: 'Full certificate + recommendations', href: pc ? `https://find-energy-certificate.service.gov.uk/find-a-certificate/search-by-postcode?postcode=${enc}` : 'https://find-energy-certificate.service.gov.uk/' },
     { label: 'Broadband & mobile', sub: 'Ofcom coverage checker', href: 'https://checker.ofcom.org.uk/en-gb/broadband-coverage' },
+    { label: 'Ground stability & geology', sub: 'BGS Geology of Britain viewer', href: 'https://mapapps.bgs.ac.uk/geologyofbritain/home.html' },
+    { label: 'Coal mining risk', sub: 'Coal Authority interactive map (mining areas)', href: 'https://mapapps2.bgs.ac.uk/coalauthority/home.html' },
     { label: 'Local crime detail', sub: 'Street-level on police.uk', href: 'https://www.police.uk/' },
     { label: 'Planning & local council', sub: "The property's planning authority", href: 'https://www.gov.uk/find-local-council' },
     { label: 'School admissions & catchments', sub: 'Council admissions (catchments vary)', href: 'https://www.gov.uk/schools-admissions' },
