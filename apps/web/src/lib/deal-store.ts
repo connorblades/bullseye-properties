@@ -24,6 +24,10 @@ import {
 export type StageRating = 'Good' | 'OK' | 'Issue' | '';
 export type MortgageType = 'cash' | 'interest-only' | 'repayment';
 
+/** M5 pipeline board stages (lead -> sourcing -> ... -> offer outcome -> follow-up). */
+export type PipelineStage =
+  | 'leads' | 'sourcing' | 'viewing' | 'analysis' | 'report' | 'offer' | 'won' | 'lost' | 'followup';
+
 export type Comp = {
   id: string;
   address: string;
@@ -287,6 +291,11 @@ export type Deal = {
     'why-this-fits' | 'location' | 'condition' | 'offer-rationale' | 'next-steps',
     string
   >>;
+
+  // M5 pipeline: partner-controlled board stage (stored in inputs jsonb, no
+  // migration). When unset, the board derives a stage from wizard progress.
+  pipelineStage?: PipelineStage;
+  followUpAt?: string;   // ISO date for the next follow-up, if scheduled
 
   criteria: {
     budget: string;
