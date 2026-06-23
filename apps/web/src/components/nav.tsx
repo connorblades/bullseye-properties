@@ -14,6 +14,7 @@ export function Nav({
         <Logo size="md" />
         <div className="flex items-center gap-6 text-sm">
           <Link href="/dashboard" className="text-ink-mid hover:text-navy font-semibold transition">Deals</Link>
+          <Link href="/pipeline" className="text-ink-mid hover:text-navy font-semibold transition">Pipeline</Link>
           <span className="text-ink-muted font-semibold cursor-default hidden md:inline">Clients</span>
           <span className="text-ink-muted font-semibold cursor-default hidden md:inline">Network</span>
           {userEmail && (

@@ -381,6 +381,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   const set = (k: keyof Deal['viewing'], v: string | number | string[]) =>
     update({ viewing: { ...deal.viewing, [k]: v } });
 
+  const phase = deal.viewing.phase ?? 'on';
   const categories: { key: keyof Deal['viewing']; label: string }[] = [
     { key: 'roof', label: 'Roof' },
     { key: 'damp', label: 'Damp' },
@@ -390,65 +391,156 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
     { key: 'structure', label: 'Structure' },
   ];
 
+  const phases: { key: 'pre' | 'on' | 'post'; label: string; sub: string }[] = [
+    { key: 'pre', label: 'Before', sub: 'Prep & questions' },
+    { key: 'on', label: 'During', sub: 'Condition & photos' },
+    { key: 'post', label: 'After', sub: 'Summary & outcome' },
+  ];
+
+  const prepPrompts = [
+    'Confirm access, keys and who is attending.',
+    'Reason for sale and chain position.',
+    'Any known structural, damp or roof issues.',
+    'What is included (white goods, carpets, parking).',
+    'Tenure, service charge and ground rent (if leasehold).',
+  ];
+
   return (
     <div className="space-y-4">
-      <div className="card p-6">
-        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-4">Condition assessment</div>
-        <div className="grid grid-cols-2 gap-3">
-          {categories.map((cat) => {
-            const value = deal.viewing[cat.key] as StageRating;
-            return (
-              <div key={cat.key} className="border border-black/[0.08] rounded-lg p-4">
-                <div className="text-xs font-bold text-ink uppercase tracking-wider mb-2">{cat.label}</div>
-                <div className="flex gap-2">
-                  {(['Good', 'OK', 'Issue'] as const).map((s) => {
-                    const active = value === s;
-                    const colour = s === 'Good' ? 'success' : s === 'OK' ? 'amber' : 'red';
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => set(cat.key, s)}
-                        className={`text-xs font-semibold px-2.5 py-1 rounded border transition ${
-                          active
-                            ? colour === 'success' ? 'border-success bg-success-light text-success-dark'
-                            : colour === 'amber'   ? 'border-amber bg-amber/15 text-amber'
-                            :                         'border-red-400 bg-red-50 text-red-600'
-                            : 'border-black/[0.08] text-ink-mid hover:border-navy/30 hover:text-navy'
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {/* Phase switcher */}
+      <div className="card p-1.5 flex gap-1">
+        {phases.map((p) => {
+          const active = phase === p.key;
+          return (
+            <button
+              key={p.key}
+              onClick={() => set('phase', p.key)}
+              className={`flex-1 rounded-lg px-3 py-2 text-left transition ${active ? 'bg-navy text-white' : 'hover:bg-bg text-ink-mid'}`}
+            >
+              <div className="text-sm font-bold">{p.label}</div>
+              <div className={`text-[11px] ${active ? 'text-white/70' : 'text-ink-muted'}`}>{p.sub}</div>
+            </button>
+          );
+        })}
       </div>
 
-      <div className="card p-6">
-        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Viewing notes</div>
-        <textarea
-          value={deal.viewing.notes}
-          onChange={(e) => set('notes', e.target.value)}
-          rows={4}
-          placeholder="What did you notice on the day? Anything to flag in the report?"
-          className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
-        />
-      </div>
-
-      <div className="card p-6">
-        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-3">
-          Photos ({deal.viewing.photos.length} / 30)
+      {/* BEFORE */}
+      {phase === 'pre' && (
+        <div className="card p-6">
+          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Pre-viewing prep</div>
+          <textarea
+            value={deal.viewing.prep ?? ''}
+            onChange={(e) => set('prep', e.target.value)}
+            rows={5}
+            placeholder="Questions to ask, things to check, access details..."
+            className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
+          />
+          <div className="mt-4 text-xs font-bold text-ink-muted uppercase tracking-wider mb-2">Suggested questions</div>
+          <ul className="space-y-1.5">
+            {prepPrompts.map((q) => (
+              <li key={q} className="text-sm text-ink-mid flex items-start gap-2">
+                <span className="text-navy mt-0.5">•</span> {q}
+              </li>
+            ))}
+          </ul>
         </div>
-        <ImageGallery
-          images={deal.viewing.photos}
-          onChange={(imgs) => set('photos', imgs)}
-          max={30}
-          label="Add photo"
-        />
-      </div>
+      )}
+
+      {/* DURING */}
+      {phase === 'on' && (
+        <>
+          <div className="card p-6">
+            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-4">Condition assessment</div>
+            <div className="grid grid-cols-2 gap-3">
+              {categories.map((cat) => {
+                const value = deal.viewing[cat.key] as StageRating;
+                return (
+                  <div key={cat.key} className="border border-black/[0.08] rounded-lg p-4">
+                    <div className="text-xs font-bold text-ink uppercase tracking-wider mb-2">{cat.label}</div>
+                    <div className="flex gap-2">
+                      {(['Good', 'OK', 'Issue'] as const).map((s) => {
+                        const active = value === s;
+                        const colour = s === 'Good' ? 'success' : s === 'OK' ? 'amber' : 'red';
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => set(cat.key, s)}
+                            className={`text-xs font-semibold px-2.5 py-1 rounded border transition ${
+                              active
+                                ? colour === 'success' ? 'border-success bg-success-light text-success-dark'
+                                : colour === 'amber'   ? 'border-amber bg-amber/15 text-amber'
+                                :                         'border-red-400 bg-red-50 text-red-600'
+                                : 'border-black/[0.08] text-ink-mid hover:border-navy/30 hover:text-navy'
+                            }`}
+                          >
+                            {s}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card p-6">
+            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Viewing notes</div>
+            <textarea
+              value={deal.viewing.notes}
+              onChange={(e) => set('notes', e.target.value)}
+              rows={4}
+              placeholder="What did you notice on the day? Anything to flag in the report?"
+              className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
+            />
+          </div>
+
+          <div className="card p-6">
+            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-3">
+              Photos ({deal.viewing.photos.length} / 30)
+            </div>
+            <ImageGallery
+              images={deal.viewing.photos}
+              onChange={(imgs) => set('photos', imgs)}
+              max={30}
+              label="Add photo"
+            />
+          </div>
+        </>
+      )}
+
+      {/* AFTER */}
+      {phase === 'post' && (
+        <div className="card p-6">
+          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Post-viewing summary</div>
+          <textarea
+            value={deal.viewing.summary ?? ''}
+            onChange={(e) => set('summary', e.target.value)}
+            rows={5}
+            placeholder="Overall impression, anything that changes the numbers, next actions..."
+            className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
+          />
+          <div className="mt-4 text-xs font-bold text-ink-muted uppercase tracking-wider mb-2">Outcome</div>
+          <div className="flex gap-2">
+            {([
+              { key: 'proceed', label: 'Proceed', cls: 'border-success bg-success-light text-success-dark' },
+              { key: 'undecided', label: 'Undecided', cls: 'border-amber bg-amber/15 text-amber' },
+              { key: 'pass', label: 'Pass', cls: 'border-red-400 bg-red-50 text-red-600' },
+            ] as const).map((o) => {
+              const active = (deal.viewing.outcome ?? '') === o.key;
+              return (
+                <button
+                  key={o.key}
+                  onClick={() => set('outcome', o.key)}
+                  className={`text-sm font-semibold px-4 py-2 rounded-lg border transition ${active ? o.cls : 'border-black/[0.08] text-ink-mid hover:border-navy/30 hover:text-navy'}`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

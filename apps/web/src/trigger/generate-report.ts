@@ -1,4 +1,4 @@
-import { task, logger } from '@trigger.dev/sdk/v3';
+import { task, logger } from '@trigger.dev/sdk';
 import { generateAndStoreReport } from '@/server/pdf/generate-report';
 
 /**

@@ -1,4 +1,4 @@
-import { defineConfig } from '@trigger.dev/sdk/v3';
+import { defineConfig } from '@trigger.dev/sdk';
 
 /**
  * Trigger.dev v3 configuration.

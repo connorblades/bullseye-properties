@@ -405,6 +405,14 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             <Body style={{ fontSize: 9 }}>{deal.viewing.notes}</Body>
           </View>
         ) : null}
+        {deal.viewing.summary ? (
+          <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: C.border }}>
+            <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, fontWeight: 700, color: C.inkMuted, marginBottom: 3 }}>
+              POST-VIEWING SUMMARY
+            </Text>
+            <Body style={{ fontSize: 9 }}>{deal.viewing.summary}</Body>
+          </View>
+        ) : null}
       </Card>
 
       {/* EPC block */}

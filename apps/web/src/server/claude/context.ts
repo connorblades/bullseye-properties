@@ -132,6 +132,24 @@ export function buildDealContext(deal: Deal): string {
       push('Employment rate (%)', pd.areaStats.employmentRate);
     }
     if (pd.airQuality) push('Air quality', `${pd.airQuality.band} (AQI ${pd.airQuality.aqi})`);
+    if (pd.riverLevels?.stations?.length) {
+      const s = pd.riverLevels.stations[0];
+      push('Nearest river-level station', `${s.riverName ? `${s.riverName} - ` : ''}${s.label}, ~${s.distanceKm}km`);
+    }
+    if (pd.landOwnership?.titles?.length) {
+      const names = pd.landOwnership.titles.flatMap((t) => t.proprietors.map((p) => p.name));
+      const unique = Array.from(new Set(names)).slice(0, 5);
+      if (unique.length) push('Corporate owners at postcode (HMLR)', unique.join('; '));
+    }
+    if (pd.broadband) {
+      const b = pd.broadband;
+      const parts = [
+        b.maxDownloadMbps != null ? `max ${b.maxDownloadMbps} Mbit/s` : null,
+        b.fullFibrePct != null ? `full fibre ${b.fullFibrePct.toFixed(0)}%` : null,
+      ].filter(Boolean);
+      if (parts.length) push('Broadband (Ofcom)', parts.join(', '));
+    }
+    if (pd.boundary?.inspireId) push('Plot boundary', 'HMLR INSPIRE freehold boundary on file');
     if (pd.planning) {
       if (pd.planning.conservationArea) lines.push('In a conservation area.');
       if (pd.planning.listed) lines.push('Listed building designation present.');

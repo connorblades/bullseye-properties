@@ -1,4 +1,4 @@
-import { task, logger } from '@trigger.dev/sdk/v3';
+import { task, logger } from '@trigger.dev/sdk';
 
 /**
  * M0-T6 smoke-test task. Confirms Trigger.dev is wired and a Server Action

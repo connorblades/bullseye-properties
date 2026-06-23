@@ -7,6 +7,9 @@
 
 export * from './hello-world';
 export * from './generate-report';
+export * from './ingest-land-data';
+export * from './ingest-broadband';
+export * from './ingest-boundaries';
 // future:
 // export * from './send-share-link';
 // export * from './refresh-public-data';

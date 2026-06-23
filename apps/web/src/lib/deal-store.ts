@@ -24,6 +24,10 @@ import {
 export type StageRating = 'Good' | 'OK' | 'Issue' | '';
 export type MortgageType = 'cash' | 'interest-only' | 'repayment';
 
+/** M5 pipeline board stages (lead -> sourcing -> ... -> offer outcome -> follow-up). */
+export type PipelineStage =
+  | 'leads' | 'sourcing' | 'viewing' | 'analysis' | 'report' | 'offer' | 'won' | 'lost' | 'followup';
+
 export type Comp = {
   id: string;
   address: string;
@@ -81,6 +85,54 @@ export type FloodInfo = {
   riversAndSea: string;       // descriptive risk-from-rivers-and-sea
   surfaceWater: string;       // descriptive surface-water risk
   hasActiveWarning: boolean;  // any live EA flood warning/alert covering the point
+  source: string;
+};
+
+// HMLR INSPIRE: freehold plot boundary polygon (WGS84 GeoJSON geometry).
+export type BoundaryInfo = {
+  inspireId?: string;
+  geojson: { type: string; coordinates: unknown };
+};
+
+// Ofcom Connected Nations: fixed-broadband coverage at the postcode.
+export type BroadbandInfo = {
+  maxDownloadMbps?: number;
+  superfastPct?: number;    // % premises >= 30 Mbit/s
+  ultrafastPct?: number;    // % premises >= 300 Mbit/s
+  fullFibrePct?: number;    // % premises with FTTP
+  premises?: number;
+  source: string;
+};
+
+// HMLR CCOD/OCOD: company owners of property at the postcode (free; corporate
+// owners only - individuals are not in the free datasets).
+export type CorporateOwner = {
+  name: string;
+  companyRegNo?: string;
+  category?: string;     // e.g. "Limited Company or PLC"
+  country?: string;      // for overseas (OCOD)
+};
+export type LandOwnershipTitle = {
+  titleNumber: string;
+  tenure?: string;
+  address?: string;
+  pricePaid?: number;
+  dataset: 'ccod' | 'ocod';
+  proprietors: CorporateOwner[];
+};
+export type LandOwnershipInfo = {
+  titles: LandOwnershipTitle[];   // corporate-owned titles at this postcode
+};
+
+// EA real-time flood-monitoring: nearest river-level monitoring stations.
+export type RiverStation = {
+  label: string;
+  riverName?: string;
+  town?: string;
+  distanceKm: number;
+};
+export type RiverLevelInfo = {
+  stations: RiverStation[];   // nearest first
   source: string;
 };
 
@@ -234,7 +286,8 @@ export type SchoolInfo = {
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
-  | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps';
+  | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
+  | 'riverLevels' | 'landOwnership' | 'broadband' | 'boundary';
 
 export type PublicData = {
   postcode: string;
@@ -256,6 +309,10 @@ export type PublicData = {
   councilTax?: CouncilTaxInfo;
   epc?: EpcInfo;
   maps?: MapLayers;
+  riverLevels?: RiverLevelInfo;
+  landOwnership?: LandOwnershipInfo;
+  broadband?: BroadbandInfo;
+  boundary?: BoundaryInfo;
 };
 
 export type DocumentKind = 'floor-plan' | 'title-plan' | 'epc' | 'land-registry' | 'other';
@@ -287,6 +344,11 @@ export type Deal = {
     'why-this-fits' | 'location' | 'condition' | 'offer-rationale' | 'next-steps',
     string
   >>;
+
+  // M5 pipeline: partner-controlled board stage (stored in inputs jsonb, no
+  // migration). When unset, the board derives a stage from wizard progress.
+  pipelineStage?: PipelineStage;
+  followUpAt?: string;   // ISO date for the next follow-up, if scheduled
 
   criteria: {
     budget: string;
@@ -337,6 +399,12 @@ export type Deal = {
     structure: StageRating;
     notes: string;
     photos: string[];
+    // M5 viewing sub-states: before (prep), on (condition assessment), after
+    // (summary + outcome). `phase` is the partner's current sub-state.
+    phase?: 'pre' | 'on' | 'post';
+    prep?: string;
+    summary?: string;
+    outcome?: 'proceed' | 'pass' | 'undecided' | '';
   };
 
   growth: {
@@ -411,7 +479,7 @@ export function emptyDeal(id: string, initial: Partial<Deal> = {}): Deal {
     salesComps: [],
     rentalComps: [],
     auction: { isAuction: false, buyerFees: '', specialConditions: '', restrictiveCovenants: '' },
-    viewing: { roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '', notes: '', photos: [] },
+    viewing: { roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '', notes: '', photos: [], phase: 'pre', prep: '', summary: '', outcome: '' },
     growth: {
       capitalGrowthPct: '3.0',
       rentalGrowthPct: '2.0',

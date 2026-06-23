@@ -4,12 +4,12 @@ import dynamic from 'next/dynamic';
 import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
-  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo,
+  PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo, LandOwnershipInfo, BroadbandInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
-  GraduationCap, Building2, Wind,
+  GraduationCap, Building2, Wind, Waves, Wifi,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -33,7 +33,8 @@ const SOURCE_LABEL: Record<string, string> = {
   crime: 'Crime', flood: 'Flood risk', amenities: 'Amenities',
   pricePaid: 'Price Paid', planning: 'Planning', planningApplications: 'Planning apps',
   schools: 'Schools', areaStats: 'Population & jobs', airQuality: 'Air quality',
-  councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps',
+  councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
+  landOwnership: 'Land ownership', broadband: 'Broadband', boundary: 'Plot boundary',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -86,6 +87,74 @@ export function FloodCard({ flood }: { flood: FloodInfo }) {
         <p className="text-xs font-bold text-red-600 mt-2">Live EA flood warning active near this location.</p>
       )}
       <p className="text-[10px] text-ink-muted mt-2">Source: {flood.source}</p>
+    </Card>
+  );
+}
+
+export function LandOwnershipCard({ owned }: { owned: LandOwnershipInfo }) {
+  return (
+    <Card icon={<Landmark size={15} className="text-navy" />} title="Corporate ownership (HMLR)">
+      <div className="space-y-2">
+        {owned.titles.slice(0, 6).map((t) => (
+          <div key={t.titleNumber} className="text-xs">
+            <div className="font-semibold text-ink">
+              {t.proprietors.map((p) => p.name).join(', ') || 'Company owner'}
+            </div>
+            <div className="text-ink-muted">
+              {t.address ? `${t.address} · ` : ''}{t.tenure ?? ''}{t.proprietors[0]?.companyRegNo ? ` · Co. ${t.proprietors[0].companyRegNo}` : ''}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">
+        Company-owned titles at this postcode (HMLR CCOD/OCOD, free). Individual owners are not in the open data.
+      </p>
+    </Card>
+  );
+}
+
+export function BroadbandCard({ bb }: { bb: BroadbandInfo }) {
+  const pct = (v?: number) => (v == null ? '—' : `${v.toFixed(0)}%`);
+  return (
+    <Card icon={<Wifi size={15} className="text-navy" />} title="Broadband (Ofcom)">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Max download</div>
+          <div className="text-sm font-bold text-ink">{bb.maxDownloadMbps != null ? `${bb.maxDownloadMbps} Mbit/s` : '—'}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Full fibre</div>
+          <div className="text-sm font-bold text-ink">{pct(bb.fullFibrePct)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Superfast</div>
+          <div className="text-sm text-ink">{pct(bb.superfastPct)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Ultrafast</div>
+          <div className="text-sm text-ink">{pct(bb.ultrafastPct)}</div>
+        </div>
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">Source: {bb.source}</p>
+    </Card>
+  );
+}
+
+export function RiverLevelsCard({ rivers }: { rivers: RiverLevelInfo }) {
+  return (
+    <Card icon={<Waves size={15} className="text-navy" />} title="River-level stations (EA)">
+      <div className="space-y-1.5">
+        {rivers.stations.map((s, i) => (
+          <div key={i} className="flex items-center justify-between text-xs">
+            <span className="text-ink font-semibold">
+              {s.riverName ? `${s.riverName} — ` : ''}{s.label}
+              {s.town ? <span className="text-ink-muted font-normal"> · {s.town}</span> : null}
+            </span>
+            <span className="text-ink-muted">{s.distanceKm} km</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">Source: {rivers.source}</p>
     </Card>
   );
 }
@@ -395,6 +464,8 @@ export function OfficialLinks({ postcode }: { postcode?: string }) {
     { label: 'Detailed flood risk', sub: 'Rivers, sea, surface water + history', href: 'https://check-long-term-flood-risk.service.gov.uk/postcode' },
     { label: 'Energy certificate (EPC)', sub: 'Full certificate + recommendations', href: pc ? `https://find-energy-certificate.service.gov.uk/find-a-certificate/search-by-postcode?postcode=${enc}` : 'https://find-energy-certificate.service.gov.uk/' },
     { label: 'Broadband & mobile', sub: 'Ofcom coverage checker', href: 'https://checker.ofcom.org.uk/en-gb/broadband-coverage' },
+    { label: 'Ground stability & geology', sub: 'BGS Geology of Britain viewer', href: 'https://mapapps.bgs.ac.uk/geologyofbritain/home.html' },
+    { label: 'Coal mining risk', sub: 'Coal Authority interactive map (mining areas)', href: 'https://mapapps2.bgs.ac.uk/coalauthority/home.html' },
     { label: 'Local crime detail', sub: 'Street-level on police.uk', href: 'https://www.police.uk/' },
     { label: 'Planning & local council', sub: "The property's planning authority", href: 'https://www.gov.uk/find-local-council' },
     { label: 'School admissions & catchments', sub: 'Council admissions (catchments vary)', href: 'https://www.gov.uk/schools-admissions' },
@@ -458,6 +529,9 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
       <OfficialLinks postcode={data.postcode} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {data.flood && <FloodCard flood={data.flood} />}
+        {data.riverLevels && <RiverLevelsCard rivers={data.riverLevels} />}
+        {data.landOwnership && <LandOwnershipCard owned={data.landOwnership} />}
+        {data.broadband && <BroadbandCard bb={data.broadband} />}
         {data.epc && <EpcCard epc={data.epc} />}
         {data.hpi && <HpiCard hpi={data.hpi} />}
         {data.areaStats && <AreaStatsCard stats={data.areaStats} />}
