@@ -1181,10 +1181,12 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
             {phase === 'review' && 'Review and edit the draft'}
             {phase === 'publishing' && 'Publishing...'}
             {phase === 'published' && 'Report published'}
-            {phase === 'idle' && 'Generate the Standard Deal Report'}
+            {phase === 'idle' && 'Generate the Final Report (Report 2)'}
           </h2>
           <p className="text-sm text-ink-mid max-w-xl">
-            Claude will draft the five narrative sections from your inputs. You can edit each before publishing.
+            The full Standard Deal Report, built on the pre-viewing pack (Report 1) plus your viewing findings. Claude
+            drafts the five narrative sections from your inputs; edit each before publishing. Sending is gated until the
+            viewing is signed off (Stage 8, After).
           </p>
         </div>
       </div>
