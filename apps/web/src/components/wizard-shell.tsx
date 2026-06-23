@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import Link from 'next/link';
 import { Check, Lock } from 'lucide-react';
 import { Nav } from './nav';
-import { SECTIONS } from '@/lib/sections';
+import { SECTIONS, WIZARD_PHASES } from '@/lib/sections';
 import { cn } from '@/lib/utils';
 
 export function WizardShell({
@@ -31,8 +31,16 @@ export function WizardShell({
               {SECTIONS.map((s, i) => {
                 const stepN = i + 1;
                 const status = stepN < currentStep ? 'done' : stepN === currentStep ? 'current' : 'locked';
+                const firstInPhase = i === 0 || SECTIONS[i - 1].phase !== s.phase;
+                const phaseMeta = WIZARD_PHASES.find((p) => p.key === s.phase);
                 return (
                   <li key={s.id}>
+                    {firstInPhase && phaseMeta && (
+                      <div className="mt-4 first:mt-0 mb-1.5 px-1">
+                        <div className="text-[10px] font-black text-navy uppercase tracking-wider">{phaseMeta.label}</div>
+                        <div className="text-[10px] text-ink-muted leading-tight">{phaseMeta.produces}</div>
+                      </div>
+                    )}
                     <Link
                       href={status === 'locked' ? '#' : `/deal/${dealId}/wizard/${stepN}`}
                       className={cn(
