@@ -30,6 +30,8 @@ export function PipelineBoard() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<PipelineColumnKey | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,8 +80,19 @@ export function PipelineBoard() {
       <div className="flex gap-4 min-w-max">
         {PIPELINE_COLUMNS.map((col) => {
           const items = byColumn[col.key];
+          const isDropTarget = dragOverCol === col.key && draggingId !== null;
           return (
-            <div key={col.key} className="w-72 flex-shrink-0">
+            <div
+              key={col.key}
+              onDragOver={(e) => { if (draggingId) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverCol(col.key); } }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggingId) move(draggingId, col.key);
+                setDraggingId(null);
+                setDragOverCol(null);
+              }}
+              className={`w-72 flex-shrink-0 rounded-xl p-1 transition ${isDropTarget ? 'bg-navy/[0.05] ring-2 ring-navy/30' : ''}`}
+            >
               <div className="flex items-center justify-between mb-3 px-1">
                 <div>
                   <div className="font-bold text-ink text-sm">{col.label}</div>
@@ -110,8 +123,15 @@ export function PipelineBoard() {
                   const fit = scoreLeadFit(d);
                   const fitTone = fit.pct >= 75 ? 'text-success bg-success-light' : fit.pct >= 50 ? 'text-amber-700 bg-amber-50' : 'text-red-600 bg-red-50';
                   return (
-                  <div key={d.id} className="card p-4">
+                  <div
+                    key={d.id}
+                    draggable
+                    onDragStart={(e) => { setDraggingId(d.id); e.dataTransfer.effectAllowed = 'move'; }}
+                    onDragEnd={() => { setDraggingId(null); setDragOverCol(null); }}
+                    className={`card p-4 cursor-grab active:cursor-grabbing ${draggingId === d.id ? 'opacity-40' : ''}`}
+                  >
                     <Link
+                      draggable={false}
                       href={d.delivered ? `/deal/${d.id}/wizard/15` : `/deal/${d.id}/wizard/${d.progress}`}
                       className="block hover:opacity-80 transition"
                     >
