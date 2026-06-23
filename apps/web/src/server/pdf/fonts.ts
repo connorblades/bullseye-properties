@@ -2,6 +2,7 @@ import 'server-only';
 import { Font } from '@react-pdf/renderer';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { NOTO_SANS_REGULAR_B64 } from './noto-base64';
 
 /**
  * Font registration for the PDF (M3-T6).
@@ -34,24 +35,27 @@ export function registerFonts(): void {
   const dir = path.join(process.cwd(), 'public', 'fonts');
 
   try {
-    // Guaranteed fallback: one weight mapped across the scale so weight lookups
-    // resolve (bold renders as regular until a true bold face is supplied).
-    const fallback = path.join(dir, 'NotoSans-Regular.ttf');
-    if (existsSync(fallback)) {
-      Font.register({
-        family: FALLBACK_FAMILY,
-        fonts: [
-          { src: fallback, fontWeight: 400 },
-          { src: fallback, fontWeight: 500 },
-          { src: fallback, fontWeight: 700 },
-          { src: fallback, fontWeight: 900 },
-          // Italic maps to the same file (renders upright) so any `fontStyle:
-          // 'italic'` resolves rather than crashing the layout engine.
-          { src: fallback, fontWeight: 400, fontStyle: 'italic' },
-          { src: fallback, fontWeight: 700, fontStyle: 'italic' },
-        ],
-      });
-    }
+    // Guaranteed fallback: the Noto Sans bytes are base64-embedded in the bundle
+    // (noto-base64.ts) and registered via a data URI, so the font is present in
+    // every runtime - including Vercel serverless routes, where public/ is NOT
+    // traced into the lambda and a path-based register would silently fail and
+    // crash @react-pdf with `unitsPerEm undefined`. One weight is mapped across
+    // the scale so weight lookups resolve (bold renders as regular until a true
+    // bold face is supplied).
+    const fallback = `data:font/truetype;base64,${NOTO_SANS_REGULAR_B64}`;
+    Font.register({
+      family: FALLBACK_FAMILY,
+      fonts: [
+        { src: fallback, fontWeight: 400 },
+        { src: fallback, fontWeight: 500 },
+        { src: fallback, fontWeight: 700 },
+        { src: fallback, fontWeight: 900 },
+        // Italic maps to the same bytes (renders upright) so any `fontStyle:
+        // 'italic'` resolves rather than crashing the layout engine.
+        { src: fallback, fontWeight: 400, fontStyle: 'italic' },
+        { src: fallback, fontWeight: 700, fontStyle: 'italic' },
+      ],
+    });
 
     // Brand body face (Inter) - preferred when present.
     const interRegular = path.join(dir, 'Inter-Regular.ttf');

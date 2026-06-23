@@ -19,10 +19,10 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
   const pct = (n: number) => `${n.toFixed(1)}%`;
 
   const tiles: { label: string; value: string }[] = [
-    { label: 'Guide price', value: o.price != null ? fmtOutlineGBP(o.price) : '—' },
-    { label: 'Est. rent (pcm)', value: o.monthlyRent != null ? fmtOutlineGBP(o.monthlyRent) : '—' },
-    { label: 'Gross yield', value: o.grossYield > 0 ? pct(o.grossYield) : '—' },
-    { label: 'Net yield', value: o.netYield > 0 ? pct(o.netYield) : '—' },
+    { label: 'Guide price', value: o.price != null ? fmtOutlineGBP(o.price) : 'TBC' },
+    { label: 'Est. rent (pcm)', value: o.monthlyRent != null ? fmtOutlineGBP(o.monthlyRent) : 'TBC' },
+    { label: 'Gross yield', value: o.grossYield > 0 ? pct(o.grossYield) : 'TBC' },
+    { label: 'Net yield', value: o.netYield > 0 ? pct(o.netYield) : 'TBC' },
   ];
 
   return (
@@ -40,6 +40,19 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
         <p className="text-sm text-ink-mid mb-8">
           Prepared for {deal.client || 'you'} by {partner.displayName}, your Accredited Bullseye Partner.
         </p>
+
+        {/* Pre-viewing visuals */}
+        {o.images.length > 0 && (
+          <div className={`grid gap-3 mb-8 ${o.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {o.images.map((img, i) => (
+              <figure key={i}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.src} alt={img.caption || 'Area visual'} className="w-full h-44 object-cover rounded-xl" />
+                {img.caption && <figcaption className="text-[11px] text-ink-muted mt-1">{img.caption}</figcaption>}
+              </figure>
+            ))}
+          </div>
+        )}
 
         {/* Recommendation */}
         <div className="rounded-2xl border border-navy/30 p-5 mb-8">
