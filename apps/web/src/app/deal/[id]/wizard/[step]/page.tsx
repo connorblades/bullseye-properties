@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import { WizardShell } from '@/components/wizard-shell';
-import { ImageUpload, ImageGallery } from '@/components/image-upload';
+import { ImageUpload } from '@/components/image-upload';
 import { AmenitiesEditor } from '@/components/amenities-editor';
 import { CrimeProfile } from '@/components/crime-profile';
 import { DocumentsUpload } from '@/components/documents-upload';
@@ -43,7 +43,15 @@ import {
   type Amenity,
   type PropertyDocument,
   type VendorCompany,
+  type ViewingChecklistItem,
 } from '@/lib/deal-store';
+import {
+  CHECKLIST_TO_CONDITION,
+  checklistProgress,
+  defaultViewingChecklist,
+  postViewingBlockers,
+  snapshotViewing,
+} from '@/lib/viewing';
 
 export default function WizardStepPage({ params }: { params: { id: string; step: string } }) {
   const router = useRouter();
@@ -377,36 +385,102 @@ function AuctionPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   );
 }
 
-function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
-  const set = (k: keyof Deal['viewing'], v: string | number | string[]) =>
-    update({ viewing: { ...deal.viewing, [k]: v } });
+function RatingChips({ value, onChange }: { value: StageRating; onChange: (v: StageRating) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {(['Good', 'OK', 'Issue'] as const).map((s) => {
+        const active = value === s;
+        const colour = s === 'Good' ? 'success' : s === 'OK' ? 'amber' : 'red';
+        return (
+          <button
+            key={s}
+            onClick={() => onChange(active ? '' : s)}
+            className={`text-[11px] font-semibold px-2 py-0.5 rounded border transition ${
+              active
+                ? colour === 'success' ? 'border-success bg-success-light text-success-dark'
+                : colour === 'amber'   ? 'border-amber bg-amber/15 text-amber'
+                :                         'border-red-400 bg-red-50 text-red-600'
+                : 'border-black/[0.08] text-ink-mid hover:border-navy/30 hover:text-navy'
+            }`}
+          >
+            {s}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-  const phase = deal.viewing.phase ?? 'on';
-  const categories: { key: keyof Deal['viewing']; label: string }[] = [
-    { key: 'roof', label: 'Roof' },
-    { key: 'damp', label: 'Damp' },
-    { key: 'windows', label: 'Windows' },
-    { key: 'heating', label: 'Heating' },
-    { key: 'electrics', label: 'Electrics' },
-    { key: 'structure', label: 'Structure' },
-  ];
+function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
+  const v = deal.viewing;
+  const checklist = v.checklist ?? defaultViewingChecklist();
+  const phase = v.phase ?? 'on';
+  const [signName, setSignName] = useState('');
+  const [attendee, setAttendee] = useState('');
+
+  const set = (k: keyof Deal['viewing'], val: string | number | string[]) =>
+    update({ viewing: { ...v, [k]: val } });
+
+  // Update one checklist item, and sync the core ratings + collected photos
+  // back to the legacy viewing fields the PDF reads.
+  const setItem = (key: string, patch: Partial<ViewingChecklistItem>) => {
+    const next = checklist.map((i) => (i.key === key ? { ...i, ...patch } : i));
+    const cond: Record<string, StageRating> = {};
+    for (const it of next) {
+      const c = CHECKLIST_TO_CONDITION[it.key];
+      if (c) cond[c] = (it.rating ?? '') as StageRating;
+    }
+    const photos = next.map((i) => i.photo).filter((p): p is string => !!p);
+    update({ viewing: { ...v, checklist: next, photos, ...cond } });
+  };
+
+  const progress = checklistProgress(checklist);
+  const blockers = postViewingBlockers(v);
+  const signedOff = !!v.signedOffBy;
+
+  const logViewing = () => {
+    update({ viewings: [...(deal.viewings ?? []), snapshotViewing(v, attendee.trim() || undefined)] });
+    setAttendee('');
+  };
+  const startNewViewing = () => {
+    update({
+      viewing: {
+        ...v, checklist: defaultViewingChecklist(), photos: [], notes: '', assessment: '', summary: '',
+        outcome: '', signedOffBy: '', signedOffAt: '', roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '',
+      },
+    });
+  };
 
   const phases: { key: 'pre' | 'on' | 'post'; label: string; sub: string }[] = [
-    { key: 'pre', label: 'Before', sub: 'Prep & questions' },
-    { key: 'on', label: 'During', sub: 'Condition & photos' },
-    { key: 'post', label: 'After', sub: 'Summary & outcome' },
-  ];
-
-  const prepPrompts = [
-    'Confirm access, keys and who is attending.',
-    'Reason for sale and chain position.',
-    'Any known structural, damp or roof issues.',
-    'What is included (white goods, carpets, parking).',
-    'Tenure, service charge and ground rent (if leasehold).',
+    { key: 'pre', label: 'Before', sub: 'Prospect share + prep' },
+    { key: 'on', label: 'During', sub: 'Photo checklist' },
+    { key: 'post', label: 'After', sub: 'Assessment + sign-off' },
   ];
 
   return (
     <div className="space-y-4">
+      {/* Viewing history */}
+      {(deal.viewings?.length ?? 0) > 0 && (
+        <div className="card p-4">
+          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Viewing history</div>
+          <div className="space-y-1.5">
+            {deal.viewings!.map((rec) => {
+              const p = checklistProgress(rec.checklist);
+              return (
+                <div key={rec.id} className="flex items-center justify-between text-xs bg-bg rounded-lg px-3 py-2">
+                  <span className="text-ink font-semibold">
+                    {new Date(rec.date).toLocaleDateString('en-GB')}{rec.attendee ? ` · ${rec.attendee}` : ''}
+                  </span>
+                  <span className="text-ink-muted">
+                    {p.done}/{p.total} photos{rec.outcome ? ` · ${rec.outcome}` : ''}{rec.signedOffBy ? ' · signed off' : ''}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Phase switcher */}
       <div className="card p-1.5 flex gap-1">
         {phases.map((p) => {
@@ -427,57 +501,53 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
       {/* BEFORE */}
       {phase === 'pre' && (
         <div className="card p-6">
-          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Pre-viewing prep</div>
+          <div className="text-xs font-bold text-navy uppercase tracking-wider mb-1">Pre-viewing</div>
+          <p className="text-sm text-ink-mid mb-4">This is the light pack you share with a prospect to gauge interest, before a viewing is booked. Capture any prep notes and questions for the agent here.</p>
           <textarea
-            value={deal.viewing.prep ?? ''}
+            value={v.prep ?? ''}
             onChange={(e) => set('prep', e.target.value)}
             rows={5}
-            placeholder="Questions to ask, things to check, access details..."
+            placeholder="Questions to ask the agent, things to check, access details, reason for sale, chain position, what's included..."
             className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
           />
-          <div className="mt-4 text-xs font-bold text-ink-muted uppercase tracking-wider mb-2">Suggested questions</div>
-          <ul className="space-y-1.5">
-            {prepPrompts.map((q) => (
-              <li key={q} className="text-sm text-ink-mid flex items-start gap-2">
-                <span className="text-navy mt-0.5">•</span> {q}
-              </li>
-            ))}
-          </ul>
         </div>
       )}
 
-      {/* DURING */}
+      {/* DURING - photo checklist */}
       {phase === 'on' && (
         <>
-          <div className="card p-6">
-            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-4">Condition assessment</div>
-            <div className="grid grid-cols-2 gap-3">
-              {categories.map((cat) => {
-                const value = deal.viewing[cat.key] as StageRating;
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">Viewing photo checklist</div>
+              <span className="text-xs font-bold text-navy">{progress.done} / {progress.total} captured</span>
+            </div>
+            <p className="text-xs text-ink-muted mb-4">Photograph each point at the viewing. Set a condition where relevant.</p>
+            <div className="grid md:grid-cols-2 gap-3">
+              {checklist.map((item) => {
+                const captured = item.done || !!item.photo;
                 return (
-                  <div key={cat.key} className="border border-black/[0.08] rounded-lg p-4">
-                    <div className="text-xs font-bold text-ink uppercase tracking-wider mb-2">{cat.label}</div>
-                    <div className="flex gap-2">
-                      {(['Good', 'OK', 'Issue'] as const).map((s) => {
-                        const active = value === s;
-                        const colour = s === 'Good' ? 'success' : s === 'OK' ? 'amber' : 'red';
-                        return (
-                          <button
-                            key={s}
-                            onClick={() => set(cat.key, s)}
-                            className={`text-xs font-semibold px-2.5 py-1 rounded border transition ${
-                              active
-                                ? colour === 'success' ? 'border-success bg-success-light text-success-dark'
-                                : colour === 'amber'   ? 'border-amber bg-amber/15 text-amber'
-                                :                         'border-red-400 bg-red-50 text-red-600'
-                                : 'border-black/[0.08] text-ink-mid hover:border-navy/30 hover:text-navy'
-                            }`}
-                          >
-                            {s}
-                          </button>
-                        );
-                      })}
+                  <div key={item.key} className={`border rounded-lg p-3 ${captured ? 'border-success/40 bg-success-light/30' : 'border-black/[0.08]'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <button onClick={() => setItem(item.key, { done: !item.done })} className="flex items-center gap-1.5 text-xs font-bold text-ink">
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center ${captured ? 'bg-success border-success text-white' : 'border-black/20'}`}>
+                          {captured && <CheckCircle2 size={11} />}
+                        </span>
+                        {item.label}
+                      </button>
+                      <RatingChips value={(item.rating ?? '') as StageRating} onChange={(r) => setItem(item.key, { rating: r })} />
                     </div>
+                    <ImageUpload
+                      value={item.photo}
+                      onChange={(img) => setItem(item.key, { photo: img, done: !!img || item.done })}
+                      label={`Photo: ${item.label}`}
+                      aspectRatio="4 / 3"
+                    />
+                    <input
+                      value={item.note ?? ''}
+                      onChange={(e) => setItem(item.key, { note: e.target.value })}
+                      placeholder="Note (optional)"
+                      className="w-full mt-2 border border-black/[0.08] rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-navy/30"
+                    />
                   </div>
                 );
               })}
@@ -485,61 +555,105 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
           </div>
 
           <div className="card p-6">
-            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Viewing notes</div>
+            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">General viewing notes</div>
             <textarea
-              value={deal.viewing.notes}
+              value={v.notes}
               onChange={(e) => set('notes', e.target.value)}
-              rows={4}
-              placeholder="What did you notice on the day? Anything to flag in the report?"
+              rows={3}
+              placeholder="Anything else noticed on the day?"
               className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
             />
           </div>
 
-          <div className="card p-6">
-            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-3">
-              Photos ({deal.viewing.photos.length} / 30)
-            </div>
-            <ImageGallery
-              images={deal.viewing.photos}
-              onChange={(imgs) => set('photos', imgs)}
-              max={30}
-              label="Add photo"
-            />
-          </div>
+          <button onClick={logViewing} className="btn-secondary inline-flex items-center gap-2">
+            <Plus size={16} /> Log this viewing to history
+          </button>
         </>
       )}
 
-      {/* AFTER */}
+      {/* AFTER - assessment + human sign-off */}
       {phase === 'post' && (
-        <div className="card p-6">
-          <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Post-viewing summary</div>
-          <textarea
-            value={deal.viewing.summary ?? ''}
-            onChange={(e) => set('summary', e.target.value)}
-            rows={5}
-            placeholder="Overall impression, anything that changes the numbers, next actions..."
-            className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
-          />
-          <div className="mt-4 text-xs font-bold text-ink-muted uppercase tracking-wider mb-2">Outcome</div>
-          <div className="flex gap-2">
-            {([
-              { key: 'proceed', label: 'Proceed', cls: 'border-success bg-success-light text-success-dark' },
-              { key: 'undecided', label: 'Undecided', cls: 'border-amber bg-amber/15 text-amber' },
-              { key: 'pass', label: 'Pass', cls: 'border-red-400 bg-red-50 text-red-600' },
-            ] as const).map((o) => {
-              const active = (deal.viewing.outcome ?? '') === o.key;
-              return (
-                <button
-                  key={o.key}
-                  onClick={() => set('outcome', o.key)}
-                  className={`text-sm font-semibold px-4 py-2 rounded-lg border transition ${active ? o.cls : 'border-black/[0.08] text-ink-mid hover:border-navy/30 hover:text-navy'}`}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
+        <>
+          <div className="card p-6">
+            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Top-level assessment</div>
+            <textarea
+              value={v.assessment ?? ''}
+              onChange={(e) => set('assessment', e.target.value)}
+              rows={4}
+              placeholder="Pull it together: overall condition, key findings from the photos, anything that changes the numbers."
+              className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
+            />
+            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2 mt-4">Further comments</div>
+            <textarea
+              value={v.summary ?? ''}
+              onChange={(e) => set('summary', e.target.value)}
+              rows={3}
+              placeholder="Anything else for the report or the client."
+              className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
+            />
+            <div className="mt-4 text-xs font-bold text-ink-muted uppercase tracking-wider mb-2">Outcome</div>
+            <div className="flex gap-2">
+              {([
+                { key: 'proceed', label: 'Proceed', cls: 'border-success bg-success-light text-success-dark' },
+                { key: 'undecided', label: 'Undecided', cls: 'border-amber bg-amber/15 text-amber' },
+                { key: 'pass', label: 'Pass', cls: 'border-red-400 bg-red-50 text-red-600' },
+              ] as const).map((o) => {
+                const active = (v.outcome ?? '') === o.key;
+                return (
+                  <button
+                    key={o.key}
+                    onClick={() => set('outcome', o.key)}
+                    className={`text-sm font-semibold px-4 py-2 rounded-lg border transition ${active ? o.cls : 'border-black/[0.08] text-ink-mid hover:border-navy/30 hover:text-navy'}`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+
+          {/* Human-in-the-loop sign-off (gates sending to client) */}
+          <div className={`card p-6 ${signedOff ? 'border-success/40 bg-success-light/30' : 'border-amber/40 bg-amber-50/40'}`}>
+            <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-2">Human sign-off (required before sending to client)</div>
+            {signedOff ? (
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-success-dark font-semibold flex items-center gap-2">
+                  <CheckCircle2 size={16} /> Reviewed &amp; approved by {v.signedOffBy}
+                  {v.signedOffAt ? ` · ${new Date(v.signedOffAt).toLocaleDateString('en-GB')}` : ''}
+                </div>
+                <button onClick={() => update({ viewing: { ...v, signedOffBy: '', signedOffAt: '' } })} className="text-xs text-ink-muted hover:text-red-500 font-semibold">Undo</button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-ink-mid mb-3">Confirm you&rsquo;ve reviewed the report and all the information is correct. This is the human-in-the-loop check before it goes to the client.</p>
+                {blockers.length > 0 && (
+                  <div className="text-xs text-amber-900 mb-3">Still needed: {blockers.join(', ')}.</div>
+                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={signName}
+                    onChange={(e) => setSignName(e.target.value)}
+                    placeholder="Your name"
+                    className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30"
+                  />
+                  <button
+                    onClick={() => update({ viewing: { ...v, signedOffBy: signName.trim() || 'Accredited partner', signedOffAt: new Date().toISOString() } })}
+                    disabled={!v.assessment?.trim()}
+                    className="btn-primary disabled:opacity-50"
+                  >
+                    Sign off &amp; approve
+                  </button>
+                </div>
+                {!v.assessment?.trim() && <p className="text-[11px] text-ink-muted mt-2">Add a top-level assessment first.</p>}
+              </>
+            )}
+          </div>
+
+          <button onClick={logViewing} className="btn-secondary inline-flex items-center gap-2">
+            <Plus size={16} /> Log this viewing to history
+          </button>
+          <button onClick={startNewViewing} className="text-xs text-ink-muted hover:text-navy font-semibold ml-3">Start a fresh viewing</button>
+        </>
       )}
     </div>
   );
@@ -1013,6 +1127,13 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
 
   const publish = async () => {
     if (!drafts) return;
+    // Human-in-the-loop gate: don't send to a client until the post-viewing
+    // sign-off is complete (Stage 8 -> After).
+    const viewingBlockers = postViewingBlockers(deal.viewing);
+    if (viewingBlockers.length > 0) {
+      setError(`Before sending to a client, complete the post-viewing review in Stage 8 (After): needs ${viewingBlockers.join(' and ')}.`);
+      return;
+    }
     setPhase('publishing');
     setError(null);
     try {

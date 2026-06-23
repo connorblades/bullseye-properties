@@ -88,6 +88,8 @@ export function buildDealContext(deal: Deal): string {
   push('Electrics', deal.viewing.electrics);
   push('Structure', deal.viewing.structure);
   push('Viewing notes', deal.viewing.notes);
+  push('Post-viewing assessment', deal.viewing.assessment);
+  push('Further comments', deal.viewing.summary);
 
   if (deal.refurb.needed && deal.refurb.items.length) {
     heading('Refurbishment plan');

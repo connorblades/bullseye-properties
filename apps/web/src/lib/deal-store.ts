@@ -20,8 +20,33 @@ import {
   loadDeal,
   updateDealById,
 } from '@/server/actions/deals';
+import { defaultViewingChecklist } from './viewing';
 
 export type StageRating = 'Good' | 'OK' | 'Issue' | '';
+
+// M5 viewing: a photo-checklist point captured at a viewing.
+export type ViewingChecklistItem = {
+  key: string;
+  label: string;
+  done: boolean;
+  rating?: StageRating;
+  photo?: string;   // base64 data URI
+  note?: string;
+};
+
+// A dated viewing record kept in history (1st viewing, 2nd, client viewing...).
+export type ViewingRecord = {
+  id: string;
+  date: string;            // ISO timestamp of the viewing
+  attendee?: string;       // who attended (partner / client / agent)
+  checklist: ViewingChecklistItem[];
+  notes: string;
+  assessment?: string;     // post-viewing top-level assessment
+  comments?: string;       // post-viewing further comments
+  outcome?: 'proceed' | 'pass' | 'undecided' | '';
+  signedOffBy?: string;
+  signedOffAt?: string;
+};
 export type MortgageType = 'cash' | 'interest-only' | 'repayment';
 
 /** M5 pipeline board stages (lead -> sourcing -> ... -> offer outcome -> follow-up). */
@@ -399,13 +424,21 @@ export type Deal = {
     structure: StageRating;
     notes: string;
     photos: string[];
-    // M5 viewing sub-states: before (prep), on (condition assessment), after
-    // (summary + outcome). `phase` is the partner's current sub-state.
+    // M5 viewing sub-states: before (prep), on (photo checklist), after
+    // (assessment + comments + sign-off). `phase` is the partner's current tab.
     phase?: 'pre' | 'on' | 'post';
     prep?: string;
-    summary?: string;
+    summary?: string;            // post-viewing "further comments"
     outcome?: 'proceed' | 'pass' | 'undecided' | '';
+    checklist?: ViewingChecklistItem[];   // the 12 photo points
+    assessment?: string;         // post-viewing top-level assessment
+    signedOffBy?: string;        // human-in-the-loop sign-off (gates client send)
+    signedOffAt?: string;        // ISO timestamp of sign-off
   };
+
+  // Past viewings, newest last. The live `viewing` above is the working one;
+  // "Log viewing" snapshots it here so history is never overwritten.
+  viewings?: ViewingRecord[];
 
   growth: {
     capitalGrowthPct: string;
@@ -479,7 +512,8 @@ export function emptyDeal(id: string, initial: Partial<Deal> = {}): Deal {
     salesComps: [],
     rentalComps: [],
     auction: { isAuction: false, buyerFees: '', specialConditions: '', restrictiveCovenants: '' },
-    viewing: { roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '', notes: '', photos: [], phase: 'pre', prep: '', summary: '', outcome: '' },
+    viewing: { roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '', notes: '', photos: [], phase: 'pre', prep: '', summary: '', outcome: '', checklist: defaultViewingChecklist(), assessment: '', signedOffBy: '', signedOffAt: '' },
+    viewings: [],
     growth: {
       capitalGrowthPct: '3.0',
       rentalGrowthPct: '2.0',
