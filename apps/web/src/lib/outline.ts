@@ -21,6 +21,7 @@ export type OutlineData = {
   matched: string[];   // criteria the property meets
   highlights: string[]; // light location highlights (no deep DD)
   recommendation: string;
+  images: { src: string; caption?: string }[]; // up to 2 pre-viewing visuals (area map / context shots)
 };
 
 const gbp = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
@@ -67,6 +68,14 @@ export function buildOutline(deal: Deal): OutlineData {
   const transport = deal.location?.amenities?.find((a) => a.category === 'transport');
   if (transport) highlights.push(`${transport.name}: ${transport.distanceText}`);
 
+  // Pre-viewing visuals only: the area map and any context shots uploaded at
+  // Auto-Pull. No interior/condition photos (those come from the viewing).
+  const images: { src: string; caption?: string }[] = [];
+  if (deal.location?.mapImage) images.push({ src: deal.location.mapImage, caption: 'Area map' });
+  for (const ci of deal.location?.contextImages ?? []) {
+    if (ci.imageData) images.push({ src: ci.imageData, caption: ci.caption || undefined });
+  }
+
   return {
     address: deal.address,
     price,
@@ -80,6 +89,7 @@ export function buildOutline(deal: Deal): OutlineData {
     matched: fit.reasons.filter((r) => r.ok).map((r) => r.text),
     highlights: highlights.slice(0, 5),
     recommendation: outlineRecommendation(deal),
+    images: images.slice(0, 2),
   };
 }
 

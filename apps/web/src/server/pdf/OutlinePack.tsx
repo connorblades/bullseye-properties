@@ -1,6 +1,6 @@
 import 'server-only';
 import React from 'react';
-import { Document, Page, View, Text } from '@react-pdf/renderer';
+import { Document, Page, View, Text, Image, Svg, Path } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from './tokens';
 import { DisclosureFooter, type PartnerIdentity } from './components';
 import type { OutlineData } from '@/lib/outline';
@@ -16,6 +16,15 @@ export type OutlinePackProps = {
   preparedFor?: string;
   generatedOn?: string;
 };
+
+/** Drawn tick - Noto Sans has no U+2713, which crashes @react-pdf's layout. */
+function Tick() {
+  return (
+    <Svg width={9} height={9} viewBox="0 0 24 24" style={{ marginRight: 6, marginTop: 2 }}>
+      <Path d="M4 12.5 L10 18.5 L20 6" stroke={C.success} strokeWidth={3.5} fill="none" />
+    </Svg>
+  );
+}
 
 function NumberTile({ label, value }: { label: string; value: string }) {
   return (
@@ -47,6 +56,20 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
           </Text>
         </View>
 
+        {/* Pre-viewing visuals (area map / context shots) */}
+        {data.images.length > 0 && (
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+            {data.images.map((img, i) => (
+              <View key={i} style={{ width: data.images.length > 1 ? '49%' : '100%' }}>
+                <Image src={img.src} style={{ width: '100%', height: 150, borderRadius: 6, objectFit: 'cover' }} />
+                {img.caption ? (
+                  <Text style={{ fontFamily: FONTS.body, fontSize: 7, color: C.inkMuted, marginTop: 3 }}>{img.caption}</Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Recommendation */}
         <View style={{ borderWidth: 1, borderColor: C.navy, borderRadius: 8, padding: 14, marginBottom: 16 }}>
           <Text style={{ fontFamily: FONTS.body, fontSize: 8, fontWeight: 700, color: C.navy, letterSpacing: 0.8, marginBottom: 4 }}>
@@ -57,10 +80,10 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
 
         {/* Headline numbers */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
-          <NumberTile label="Guide price" value={data.price != null ? fmtGBP(data.price) : '—'} />
-          <NumberTile label="Est. rent (pcm)" value={data.monthlyRent != null ? fmtGBP(data.monthlyRent) : '—'} />
-          <NumberTile label="Gross yield" value={data.grossYield > 0 ? fmtPct(data.grossYield) : '—'} />
-          <NumberTile label="Net yield" value={data.netYield > 0 ? fmtPct(data.netYield) : '—'} />
+          <NumberTile label="Guide price" value={data.price != null ? fmtGBP(data.price) : 'TBC'} />
+          <NumberTile label="Est. rent (pcm)" value={data.monthlyRent != null ? fmtGBP(data.monthlyRent) : 'TBC'} />
+          <NumberTile label="Gross yield" value={data.grossYield > 0 ? fmtPct(data.grossYield) : 'TBC'} />
+          <NumberTile label="Net yield" value={data.netYield > 0 ? fmtPct(data.netYield) : 'TBC'} />
         </View>
 
         {/* Why it fits */}
@@ -71,7 +94,7 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
             </Text>
             {data.matched.map((m, i) => (
               <View key={i} style={{ flexDirection: 'row', marginBottom: 3 }}>
-                <Text style={{ color: C.success, fontFamily: FONTS.body, fontSize: 10, marginRight: 6 }}>✓</Text>
+                <Tick />
                 <Text style={{ fontFamily: FONTS.body, fontSize: 10, color: C.inkMid }}>{m}</Text>
               </View>
             ))}
