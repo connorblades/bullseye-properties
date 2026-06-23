@@ -9,6 +9,9 @@ import { ingestDataset } from '@/server/public-data/land-ownership';
  */
 export const ingestLandData = task({
   id: 'ingest-land-data',
+  // CCOD full file (~1.5GB zip) OOM-kills the default small-1x worker; the
+  // stream is bounded but PostGIS batches + decompression need more headroom.
+  machine: 'medium-2x',
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
   run: async (payload: { datasets?: ('ccod' | 'ocod')[] }, { ctx }) => {

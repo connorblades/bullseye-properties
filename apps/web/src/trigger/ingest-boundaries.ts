@@ -8,6 +8,8 @@ import { ingestInspire } from '@/server/public-data/boundaries';
  */
 export const ingestBoundaries = task({
   id: 'ingest-boundaries',
+  // INSPIRE per-LA GML can be large; give the unzip + ST_GeomFromGML headroom.
+  machine: 'medium-2x',
   maxDuration: 3600,
   retry: { maxAttempts: 1 },
   run: async (_payload: Record<string, never>, { ctx }) => {
