@@ -4,6 +4,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { registerFonts } from './fonts';
 import { DealReport } from './DealReport';
 import type { ReportData } from './report-data';
+import { OutlinePack, type OutlinePackProps } from './OutlinePack';
 
 /**
  * Render the Standard Deal Report to a PDF Buffer (M3-T6).
@@ -15,4 +16,10 @@ import type { ReportData } from './report-data';
 export async function renderDealReportToBuffer(data: ReportData): Promise<Buffer> {
   registerFonts();
   return renderToBuffer(<DealReport data={data} />);
+}
+
+/** Render the 1-page Outline Deal pack (pre-viewing teaser) to a PDF Buffer. */
+export async function renderOutlinePackToBuffer(props: OutlinePackProps): Promise<Buffer> {
+  registerFonts();
+  return renderToBuffer(<OutlinePack {...props} />);
 }
