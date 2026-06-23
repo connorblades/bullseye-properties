@@ -121,8 +121,17 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
       {step === 14 && <GeneratePanel deal={deal} onDone={goNext} />}
       {step === 15 && <DeliverPanel deal={deal} />}
 
-      <div className="mt-8 flex items-center justify-between">
+      <div className="mt-8 flex items-center justify-between gap-3">
         <button onClick={goBack} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
+        <a
+          href={`/o/${id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open the pre-viewing outline pack to share with a prospect"
+          className="text-xs font-semibold text-ink-muted hover:text-navy inline-flex items-center gap-1.5"
+        >
+          <ExternalLink size={14} /> Outline pack
+        </a>
         <button onClick={goNext} className="btn-primary">
           {step === total ? 'Mark delivered' : 'Save and continue'} <ArrowRight size={18} />
         </button>
