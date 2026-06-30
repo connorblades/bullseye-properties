@@ -306,12 +306,63 @@ export const broadbandCoverage = pgTable(
   })
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Share tokens (M4) - revocable, expiring per-link tokens gating the public
+// delivery surfaces: kind 'outline' -> Report 1 (/o/[token]), kind 'report' ->
+// Report 2 (/r/[token]). Only the SHA-256 hash of the secret is stored. RLS on
+// with tenant-scoped policies (see 0008); the owner connection used by the
+// public resolution path bypasses RLS.
+// ─────────────────────────────────────────────────────────────────────────────
+export const shareTokens = pgTable(
+  'share_tokens',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    dealId: text('deal_id').notNull().references(() => deals.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(), // 'outline' | 'report'
+    tokenHash: text('token_hash').notNull().unique(),
+    reportVersionId: text('report_version_id').references(() => dealReportVersions.id, { onDelete: 'set null' }),
+    label: text('label'),
+    recipientEmail: text('recipient_email'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastAccessedAt: timestamp('last_accessed_at', { withTimezone: true }),
+    accessCount: integer('access_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid('created_by'),
+  },
+  (table) => ({
+    dealIdx: index('share_tokens_deal_idx').on(table.dealId),
+    tenantIdx: index('share_tokens_tenant_idx').on(table.tenantId),
+  })
+);
+
+export const shareTokenEvents = pgTable(
+  'share_token_events',
+  {
+    id: text('id').primaryKey(),
+    tokenId: text('token_id').notNull().references(() => shareTokens.id, { onDelete: 'cascade' }),
+    tenantId: text('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    event: text('event').notNull(), // 'open' | 'download'
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tokenIdx: index('share_token_events_token_idx').on(table.tokenId, table.occurredAt),
+    tenantIdx: index('share_token_events_tenant_idx').on(table.tenantId, table.occurredAt),
+  })
+);
+
 // Inferred types for application code
 export type Tenant = typeof tenants.$inferSelect;
 export type PublicDataCacheRow = typeof publicDataCache.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type Membership = typeof memberships.$inferSelect;
 export type Deal = typeof deals.$inferSelect;
+export type ShareToken = typeof shareTokens.$inferSelect;
+export type NewShareToken = typeof shareTokens.$inferInsert;
+export type ShareTokenEvent = typeof shareTokenEvents.$inferSelect;
 export type NewDeal = typeof deals.$inferInsert;
 export type DealReportVersion = typeof dealReportVersions.$inferSelect;
 export type ClaudeGeneration = typeof claudeGenerations.$inferSelect;
