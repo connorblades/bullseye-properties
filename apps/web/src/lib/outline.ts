@@ -1,6 +1,7 @@
 import type { Deal } from './deal-store';
 import { computeFinancials, computeGrowthProjection, parseMoney } from './deal-calcs';
 import { scoreLeadFit, parseYieldTarget } from './lead-score';
+import { computeGdv, MIN_COMPS } from './comps';
 
 /**
  * Outline deal pack (M5) - the light, pre-viewing teaser shared with a prospect
@@ -69,19 +70,28 @@ export function outlineRecommendation(deal: Deal): string {
 export function computeIndicativeOffer(deal: Deal): IndicativeOffer {
   const fin = computeFinancials(deal);
 
-  const compValues = deal.salesComps
-    .map((c) => parseMoney(c.value))
-    .filter((n): n is number => n != null && n > 0);
+  // Preferred: comparable-led GDV (HPI-adjusted price-per-sqft over >=3 comps).
+  // Falls back to a plain comp average, then the guide price, so the pack still
+  // shows something before the full comp evidence is in.
   let marketValue: number | null = null;
   let marketValueBasis = 'No comparables or guide price yet';
-  if (compValues.length > 0) {
-    marketValue = Math.round(compValues.reduce((a, b) => a + b, 0) / compValues.length);
-    marketValueBasis = `Average of ${compValues.length} sales comparable${compValues.length > 1 ? 's' : ''}`;
+  const gdv = computeGdv(deal);
+  if (gdv) {
+    marketValue = gdv.gdv;
+    marketValueBasis = `HPI-adjusted price per sqft across ${gdv.comps.length} comparable${gdv.comps.length > 1 ? 's' : ''}`;
   } else {
-    const guide = parseMoney(deal.property.askingPrice) ?? parseMoney(deal.financials.purchasePrice);
-    if (guide) {
-      marketValue = guide;
-      marketValueBasis = 'Guide / asking price (no comparables entered yet)';
+    const compValues = deal.salesComps
+      .map((c) => parseMoney(c.value))
+      .filter((n): n is number => n != null && n > 0);
+    if (compValues.length > 0) {
+      marketValue = Math.round(compValues.reduce((a, b) => a + b, 0) / compValues.length);
+      marketValueBasis = `Average of ${compValues.length} sales comparable${compValues.length > 1 ? 's' : ''} (add floor areas + ${MIN_COMPS}+ comps for a price-per-sqft GDV)`;
+    } else {
+      const guide = parseMoney(deal.property.askingPrice) ?? parseMoney(deal.financials.purchasePrice);
+      if (guide) {
+        marketValue = guide;
+        marketValueBasis = 'Guide / asking price (no comparables entered yet)';
+      }
     }
   }
 

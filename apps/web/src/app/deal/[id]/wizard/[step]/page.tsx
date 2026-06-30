@@ -52,6 +52,7 @@ import {
   postViewingBlockers,
   snapshotViewing,
 } from '@/lib/viewing';
+import { computeGdv, estimateRent, MIN_COMPS } from '@/lib/comps';
 
 export default function WizardStepPage({ params }: { params: { id: string; step: string } }) {
   const router = useRouter();
@@ -338,9 +339,12 @@ function CompsPanel({ kind, deal, update }: { kind: 'sales' | 'rental'; deal: De
           <div key={c.id} className="card p-5">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-lg bg-navy/[0.08] text-navy font-black flex items-center justify-center flex-shrink-0">{i + 1}</div>
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className={`flex-1 grid grid-cols-1 gap-3 ${kind === 'sales' ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
                 <input value={c.address} onChange={(e) => setRow(c.id, { address: e.target.value })} placeholder="Address" className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
-                <input value={c.detail} onChange={(e) => setRow(c.id, { detail: e.target.value })} placeholder={kind === 'sales' ? 'e.g. Sold 2025-08, 740 sqft' : 'e.g. Listed 2025-09, 2-bed'} className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+                <input value={c.detail} onChange={(e) => setRow(c.id, { detail: e.target.value })} placeholder={kind === 'sales' ? 'e.g. Sold 2025-08' : 'e.g. Let 2025-09, 2-bed'} className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+                {kind === 'sales' && (
+                  <input value={c.floorArea ?? ''} onChange={(e) => setRow(c.id, { floorArea: e.target.value })} placeholder="Floor area (sqft)" inputMode="numeric" className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+                )}
                 <input value={c.value} onChange={(e) => setRow(c.id, { value: e.target.value })} placeholder={kind === 'sales' ? '£128,000' : '£795 / month'} className="border border-black/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
               </div>
               <button onClick={() => remove(c.id)} className="text-ink-muted hover:text-red-500 transition" aria-label="Remove"><X size={18} /></button>
@@ -362,6 +366,77 @@ function CompsPanel({ kind, deal, update }: { kind: 'sales' | 'rental'; deal: De
       <button onClick={add} className="w-full border-2 border-dashed border-black/[0.08] rounded-2xl py-4 text-sm font-bold text-ink-muted hover:border-navy/30 hover:text-navy transition flex items-center justify-center gap-2">
         <Plus size={16} /> Add comparable {list.length + 1}
       </button>
+
+      {kind === 'sales' ? <GdvSummary deal={deal} /> : <RentEstimateSummary deal={deal} />}
+    </div>
+  );
+}
+
+/** Comparable-led GDV (HPI-adjusted price-per-sqft) shown live under the sales comps. */
+function GdvSummary({ deal }: { deal: Deal }) {
+  const gdv = computeGdv(deal);
+  const subjectSqFt = deal.property.floorArea?.trim();
+
+  if (!gdv) {
+    const reasons: string[] = [];
+    if (!subjectSqFt) reasons.push('set the subject floor area on Property Details');
+    if (!deal.publicData?.hpi) reasons.push('run Auto-Pull so the HPI series is available');
+    const withInputs = deal.salesComps.filter(
+      (c) => parseMoney(c.value) && parseSoldMonth(c.detail) && (c.floorArea || '').trim()
+    ).length;
+    if (withInputs < MIN_COMPS) reasons.push(`add at least ${MIN_COMPS} comps with a price, a sold month (e.g. "Sold 2025-08") and a floor area (have ${withInputs})`);
+    return (
+      <div className="card p-5 border-amber/40 bg-amber-50/40">
+        <div className="text-xs font-bold text-amber-900 uppercase tracking-wider mb-1">Estimated value (GDV)</div>
+        <div className="text-sm text-ink-mid">To evidence a price-per-sqft GDV, {reasons.join('; ')}.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-5 border-navy/30 bg-navy/[0.03]">
+      <div className="flex items-baseline justify-between mb-2">
+        <div className="text-xs font-bold text-navy uppercase tracking-wider">Estimated value (GDV)</div>
+        <div className="text-2xl font-black text-navy">{fmtMoney(gdv.gdv)}</div>
+      </div>
+      <div className="text-xs text-ink-muted mb-3">
+        HPI-adjusted price per sqft across {gdv.comps.length} comparable{gdv.comps.length > 1 ? 's' : ''}, applied to the
+        subject {gdv.subjectSqFt.toLocaleString()} sqft, rounded to the nearest £5,000 (raw {fmtMoney(Math.round(gdv.rawGdv))}).
+        {gdv.capped && ` ${gdv.usableCount} usable; first ${gdv.comps.length} used.`}
+      </div>
+      <div className="space-y-1">
+        {gdv.comps.map((c) => (
+          <div key={c.id} className="flex items-center justify-between text-xs text-ink-mid">
+            <span className="truncate mr-3">{c.address || 'Comparable'} ({c.floorArea.toLocaleString()} sqft, {c.soldMonth})</span>
+            <span className="text-ink-muted whitespace-nowrap">{fmtMoney(Math.round(c.perSqFt))}/sqft &rarr; <span className="font-semibold text-ink">{fmtMoney(Math.round(c.impliedValue))}</span></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Like-for-like rent uplifted to today by the local growth assumption. */
+function RentEstimateSummary({ deal }: { deal: Deal }) {
+  const rent = estimateRent(deal);
+  if (!rent) {
+    return (
+      <div className="card p-5 border-amber/40 bg-amber-50/40">
+        <div className="text-xs font-bold text-amber-900 uppercase tracking-wider mb-1">Estimated rent</div>
+        <div className="text-sm text-ink-mid">Add rental comps with a rent and a let month (e.g. &quot;Let 2025-09&quot;) to estimate today&apos;s rent.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="card p-5 border-navy/30 bg-navy/[0.03]">
+      <div className="flex items-baseline justify-between mb-1">
+        <div className="text-xs font-bold text-navy uppercase tracking-wider">Estimated rent (pcm)</div>
+        <div className="text-2xl font-black text-navy">{fmtMoney(rent.estimate)}</div>
+      </div>
+      <div className="text-xs text-ink-muted">
+        {rent.compCount} like-for-like comp{rent.compCount > 1 ? 's' : ''}, uplifted {rent.growthPctUsed}% a year to {rent.asOfMonth},
+        rounded to the nearest £25. Set the rental growth on Growth Drivers to change the uplift.
+      </div>
     </div>
   );
 }
