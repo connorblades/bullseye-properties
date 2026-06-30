@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { requireUser } from '@/server/auth/server';
 import { signOut } from '@/server/actions/auth';
 import { loadDeal } from '@/server/actions/deals';
+import { dealHasRenderedReport } from '@/server/actions/share';
 import { Nav } from '@/components/nav';
 import { ShareLinkManager } from '@/components/share-link-manager';
 
@@ -19,6 +20,7 @@ export default async function DealSharePage({ params }: { params: { id: string }
   const user = await requireUser();
   const deal = await loadDeal(params.id);
   if (!deal) notFound();
+  const hasReport = await dealHasRenderedReport(params.id);
 
   return (
     <div className="min-h-screen">
@@ -37,12 +39,21 @@ export default async function DealSharePage({ params }: { params: { id: string }
           <p className="text-sm text-ink-mid mt-1">{deal.reference}</p>
         </div>
 
-        <ShareLinkManager
-          dealId={params.id}
-          kind="outline"
-          title="Outline pack (Report 1)"
-          description="Revocable, expiring links to the pre-viewing Outline pack. Send one per prospect so you can revoke or track each independently. The link is shown once on creation."
-        />
+        <div className="space-y-6">
+          <ShareLinkManager
+            dealId={params.id}
+            kind="outline"
+            title="Outline pack (Report 1)"
+            description="Revocable, expiring links to the pre-viewing Outline pack. Send one per prospect so you can revoke or track each independently. The link is shown once on creation."
+          />
+          <ShareLinkManager
+            dealId={params.id}
+            kind="report"
+            title="Full report (Report 2)"
+            description="Revocable, expiring links to the full Standard Deal Report. Each link is pinned to the report version current when you create it."
+            disabledReason={hasReport ? undefined : 'Generate the full report in Stage 14 first, then create a share link here.'}
+          />
+        </div>
       </main>
     </div>
   );
