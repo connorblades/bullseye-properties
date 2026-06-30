@@ -1,20 +1,39 @@
 import { notFound } from 'next/navigation';
-import { loadDealPublic } from '@/server/deal/public';
+import { headers } from 'next/headers';
+import { resolveOutlineAccess } from '@/server/share/access';
+import { recordShareAccess, hashIp } from '@/server/share/tokens';
 import { buildOutline, fmtOutlineGBP } from '@/lib/outline';
 import { Logo } from '@/components/logo';
 
 /**
- * Public, read-only Outline Deal page (M5) - the shareable pre-viewing teaser a
- * partner sends a prospect to gauge interest. Calm, reader-oriented; no app
- * chrome, no auth.
+ * Public, read-only Outline Deal page (M5; tokenised in M4-T2) - the shareable
+ * pre-viewing teaser a partner sends a prospect to gauge interest. Calm,
+ * reader-oriented; no app chrome, no auth. The path segment is resolved as a
+ * revocable share token first, falling back to the legacy raw-ULID link.
  */
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Outline Deal · Bullseye Properties' };
 
 export default async function OutlineSharePage({ params }: { params: { id: string } }) {
-  const res = await loadDealPublic(params.id);
-  if (!res) notFound();
-  const { deal, partner } = res;
+  const access = await resolveOutlineAccess(params.id);
+  if (access.status === 'not_found') notFound();
+  if (access.status === 'revoked' || access.status === 'expired') {
+    return <InactiveLink reason={access.status} />;
+  }
+
+  const { deal, partner, token } = access;
+
+  // Log the open for tokenised access (best-effort; never blocks the page).
+  if (token) {
+    try {
+      const h = headers();
+      const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+      await recordShareAccess(token, 'open', { ipHash: hashIp(ip), userAgent: h.get('user-agent') });
+    } catch {
+      // logging failure must not break delivery
+    }
+  }
+
   const o = buildOutline(deal);
   const pct = (n: number) => `${n.toFixed(1)}%`;
 
@@ -129,6 +148,26 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
           assessment and financial detail follow in the complete report after a viewing. Questions? Reply to the email this
           was sent in, or speak to your partner directly.
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Shown when a share link has been revoked or has expired. */
+function InactiveLink({ reason }: { reason: 'revoked' | 'expired' }) {
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center px-6">
+      <div className="max-w-md text-center">
+        <div className="flex justify-center mb-6">
+          <Logo size="md" />
+        </div>
+        <h1 className="text-2xl font-black text-ink mb-3">This link is no longer active</h1>
+        <p className="text-sm text-ink-mid leading-relaxed">
+          {reason === 'expired'
+            ? 'This outline link has expired.'
+            : 'This outline link has been revoked.'}{' '}
+          Please contact your Bullseye partner for an up-to-date link.
+        </p>
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ import {
   PublicDataPanel, FloodCard, EpcCard,
   DemographicsCard, PlanningCard,
 } from '@/components/public-data-panel';
-import { Receipt, ExternalLink } from 'lucide-react';
+import { Receipt, ExternalLink, Link2 } from 'lucide-react';
 import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
@@ -124,15 +124,24 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
 
       <div className="mt-8 flex items-center justify-between gap-3">
         <button onClick={goBack} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
-        <a
-          href={`/o/${id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open the pre-viewing outline pack to share with a prospect"
-          className="text-xs font-semibold text-ink-muted hover:text-navy inline-flex items-center gap-1.5"
-        >
-          <ExternalLink size={14} /> Outline pack
-        </a>
+        <div className="flex items-center gap-4">
+          <a
+            href={`/o/${id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Preview the pre-viewing outline pack (your own copy)"
+            className="text-xs font-semibold text-ink-muted hover:text-navy inline-flex items-center gap-1.5"
+          >
+            <ExternalLink size={14} /> Outline preview
+          </a>
+          <a
+            href={`/deal/${id}/share`}
+            title="Create and manage revocable share links to send to investors"
+            className="text-xs font-semibold text-ink-muted hover:text-navy inline-flex items-center gap-1.5"
+          >
+            <Link2 size={14} /> Share links
+          </a>
+        </div>
         <button onClick={goNext} className="btn-primary">
           {step === total ? 'Mark delivered' : 'Save and continue'} <ArrowRight size={18} />
         </button>
