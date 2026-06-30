@@ -98,7 +98,21 @@ describe('estimateRent', () => {
   });
 
   it('defaults to 4% growth when none is set, and returns null with no usable comps', () => {
-    expect(estimateRent(dealWith({ rentals: [{ value: '£800', detail: 'Let 2024-01' }] }))!.growthPctUsed).toBe(4);
+    const r = estimateRent(dealWith({ rentals: [{ value: '£800', detail: 'Let 2024-01' }] }))!;
+    expect(r.growthPctUsed).toBe(4);
+    expect(r.growthSource).toBe('default');
     expect(estimateRent(dealWith({ rentals: [{ value: '£800', detail: 'no date' }] }))).toBeNull();
+  });
+
+  it('prefers the manual assumption, then a local rent-trend feed when present', () => {
+    const manual = estimateRent(dealWith({ rentals: [{ value: '£800', detail: 'Let 2024-01' }], rentGrowth: '3' }))!;
+    expect(manual.growthPctUsed).toBe(3);
+    expect(manual.growthSource).toBe('manual');
+
+    const deal = dealWith({ rentals: [{ value: '£800', detail: 'Let 2024-01' }], rentGrowth: '3' });
+    deal.publicData!.rentTrend = { annualGrowthPct: 6, area: 'East Midlands', asOfMonth: '2026-06', source: 'ONS PIPR' };
+    const local = estimateRent(deal)!;
+    expect(local.growthPctUsed).toBe(6);
+    expect(local.growthSource).toBe('local');
   });
 });

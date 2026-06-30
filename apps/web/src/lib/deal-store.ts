@@ -339,6 +339,19 @@ export type PublicData = {
   landOwnership?: LandOwnershipInfo;
   broadband?: BroadbandInfo;
   boundary?: BoundaryInfo;
+  rentTrend?: RentTrendInfo;
+};
+
+/**
+ * Local rent-trend (annual % change), county/regional. Reserved seam for a
+ * future ONS Price Index of Private Rents (PIPR) feed; when present it drives
+ * the rent-comp uplift instead of the 4% default.
+ */
+export type RentTrendInfo = {
+  annualGrowthPct: number;
+  area: string;       // region / county the rate is for
+  asOfMonth: string;  // YYYY-MM
+  source: string;     // e.g. "ONS PIPR"
 };
 
 export type DocumentKind = 'floor-plan' | 'title-plan' | 'epc' | 'land-registry' | 'other';
