@@ -38,6 +38,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="Outline-Deal.pdf"`,
       'Cache-Control': 'no-store',
+      'X-Robots-Tag': 'noindex, nofollow',
     },
   });
 }

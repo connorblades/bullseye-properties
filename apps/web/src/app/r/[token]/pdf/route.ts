@@ -41,6 +41,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="Standard-Deal-Report-v${access.version.version}.pdf"`,
       'Cache-Control': 'no-store',
+      'X-Robots-Tag': 'noindex, nofollow',
     },
   });
 }
