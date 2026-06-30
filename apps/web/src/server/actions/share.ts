@@ -14,6 +14,10 @@ import { db } from '@/server/db/client';
 import { dealReportVersions } from '@/server/db/schema';
 import { requireTenant } from '@/server/auth/tenant';
 import { loadDeal } from '@/server/actions/deals';
+import { assembleDeal } from '@/server/deal/assemble';
+import { loadPartnerIdentity } from '@/server/deal/partner';
+import { buildShareEmail } from '@/server/email/share-template';
+import { sendEmail } from '@/server/email/resend';
 import { buildShareUrl } from '@/lib/share-url';
 import {
   createShareToken,
@@ -125,6 +129,51 @@ export async function createDealShareLink(
     url: buildShareUrl(input.kind, secret, siteUrl()),
     expiresAt: token.expiresAt ? token.expiresAt.toISOString() : null,
   };
+}
+
+/**
+ * Create a share link and email it to the recipient in one step. The link is
+ * always created (and returned) even if the email fails, so the partner can copy
+ * it; email failure is reported via emailSent/emailError rather than thrown.
+ */
+export async function createAndEmailShareLink(
+  input: CreateShareLinkInput & { recipientEmail: string },
+): Promise<{ id: string; url: string; expiresAt: string | null; emailSent: boolean; emailError?: string }> {
+  const recipient = input.recipientEmail.trim();
+  if (!recipient) throw new Error('A recipient email is required to send the link.');
+
+  const created = await createDealShareLink({ ...input, recipientEmail: recipient });
+
+  let emailSent = false;
+  let emailError: string | undefined;
+  try {
+    const { tenantId } = await requireTenant();
+    const deal = await loadDeal(input.dealId);
+    if (!deal) throw new Error('Deal not found');
+    const partner = await loadPartnerIdentity(tenantId);
+    const assembled = assembleDeal(deal);
+
+    const email = buildShareEmail({
+      kind: input.kind,
+      url: created.url,
+      dealAddress: deal.address,
+      partnerName: partner.displayName,
+      recipientName: assembled.client || null,
+      expiresAt: created.expiresAt,
+    });
+    await sendEmail({
+      to: recipient,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+      replyTo: partner.contactEmail || undefined,
+    });
+    emailSent = true;
+  } catch (e) {
+    emailError = e instanceof Error ? e.message : 'Email send failed.';
+  }
+
+  return { ...created, emailSent, emailError };
 }
 
 /** List a deal's share links (newest first), optionally filtered by kind. */

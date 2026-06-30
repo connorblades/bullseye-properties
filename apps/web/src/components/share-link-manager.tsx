@@ -1,14 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, Link2, Copy, Check, Ban, Eye } from 'lucide-react';
+import { Loader2, Link2, Copy, Check, Ban, Eye, Mail } from 'lucide-react';
 import {
   createDealShareLink,
+  createAndEmailShareLink,
   listDealShareLinks,
   revokeDealShareLink,
   type ShareLinkView,
 } from '@/server/actions/share';
 import type { ShareTokenKind } from '@/server/share/tokens';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const EXPIRY_OPTIONS: { label: string; days: number | null }[] = [
   { label: '90 days', days: 90 },
@@ -58,6 +61,10 @@ export function ShareLinkManager({
   const [expiryDays, setExpiryDays] = useState<number | null>(90);
   const [freshUrl, setFreshUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'warn'; text: string } | null>(null);
+
+  const recipientValid = EMAIL_RE.test(recipient.trim());
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +87,7 @@ export function ShareLinkManager({
     setCreating(true);
     setError(null);
     setCopied(false);
+    setNotice(null);
     try {
       const res = await createDealShareLink({
         dealId,
@@ -96,6 +104,36 @@ export function ShareLinkManager({
       setError(e instanceof Error ? e.message : 'Could not create the link.');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function onCreateAndEmail() {
+    const to = recipient.trim();
+    setEmailing(true);
+    setError(null);
+    setCopied(false);
+    setNotice(null);
+    try {
+      const res = await createAndEmailShareLink({
+        dealId,
+        kind,
+        label: label.trim() || null,
+        recipientEmail: to,
+        expiresInDays: expiryDays,
+      });
+      setFreshUrl(res.url);
+      setNotice(
+        res.emailSent
+          ? { kind: 'ok', text: `Link created and emailed to ${to}.` }
+          : { kind: 'warn', text: `Link created, but the email did not send: ${res.emailError ?? 'unknown error'}. Copy it below.` },
+      );
+      setLabel('');
+      setRecipient('');
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not create the link.');
+    } finally {
+      setEmailing(false);
     }
   }
 
@@ -163,11 +201,29 @@ export function ShareLinkManager({
                 </option>
               ))}
             </select>
-            <button onClick={onCreate} disabled={creating} className="btn-primary text-sm disabled:opacity-50">
+            <button onClick={onCreate} disabled={creating || emailing} className="btn-secondary text-sm disabled:opacity-50">
               {creating ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
-              Create share link
+              Create link
+            </button>
+            <button
+              onClick={onCreateAndEmail}
+              disabled={creating || emailing || !recipientValid}
+              title={recipientValid ? 'Create the link and email it to the recipient' : 'Enter a recipient email to send'}
+              className="btn-primary text-sm disabled:opacity-50"
+            >
+              {emailing ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
+              Create and email
             </button>
           </div>
+          {notice && (
+            <div
+              className={`text-xs rounded-lg px-3 py-2 ${
+                notice.kind === 'ok' ? 'text-success-dark bg-success-light/50' : 'text-amber-800 bg-amber-50 border border-amber-200'
+              }`}
+            >
+              {notice.text}
+            </div>
+          )}
         </div>
       )}
 
