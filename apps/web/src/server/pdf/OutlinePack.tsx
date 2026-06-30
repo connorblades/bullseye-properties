@@ -86,6 +86,34 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
           <NumberTile label="Net yield" value={data.netYield > 0 ? fmtPct(data.netYield) : 'TBC'} />
         </View>
 
+        {/* Indicative opening offer (pre-condition) */}
+        {data.indicative.suggestedOffer != null && (
+          <View style={{ backgroundColor: C.navy, borderRadius: 8, padding: 14, marginBottom: 16 }}>
+            <Text style={{ fontFamily: FONTS.body, fontSize: 8, fontWeight: 700, color: 'rgba(255,255,255,0.7)', letterSpacing: 0.8 }}>
+              INDICATIVE OPENING OFFER
+            </Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 22, fontWeight: 700, color: C.white, marginTop: 2 }}>
+              {fmtGBP(data.indicative.suggestedOffer)}
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 }}>
+              {data.indicative.marketValue != null && (
+                <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: 'rgba(255,255,255,0.85)', marginRight: 18 }}>
+                  {`Estimated value: ${fmtGBP(data.indicative.marketValue)} (${data.indicative.marketValueBasis.toLowerCase()})`}
+                </Text>
+              )}
+              {data.indicative.yieldMaxPrice != null && data.indicative.targetYieldPct != null && (
+                <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: 'rgba(255,255,255,0.85)' }}>
+                  {`Max for ${data.indicative.targetYieldPct}% target yield: ${fmtGBP(data.indicative.yieldMaxPrice)}`}
+                </Text>
+              )}
+            </View>
+            <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: 'rgba(255,255,255,0.7)', marginTop: 6, lineHeight: 1.4 }}>
+              A desktop estimate from comparables and your yield target. A starting point only, subject to the viewing and
+              refurbishment assessment, which may move it down.
+            </Text>
+          </View>
+        )}
+
         {/* Why it fits */}
         {data.fitApplicable > 0 && (
           <View style={{ marginBottom: 16 }}>

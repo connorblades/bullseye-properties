@@ -1,6 +1,6 @@
 import type { Deal } from './deal-store';
 import { computeFinancials, computeGrowthProjection, parseMoney } from './deal-calcs';
-import { scoreLeadFit } from './lead-score';
+import { scoreLeadFit, parseYieldTarget } from './lead-score';
 
 /**
  * Outline deal pack (M5) - the light, pre-viewing teaser shared with a prospect
@@ -8,12 +8,26 @@ import { scoreLeadFit } from './lead-score';
  * client-safe; rendered both as a 1-page PDF and a public web page.
  */
 
+/**
+ * The desktop-derived, pre-condition view on price. Everything here is
+ * computable before a viewing: it deliberately stops at "what the numbers
+ * support", and is always presented as subject to condition + refurb.
+ */
+export type IndicativeOffer = {
+  marketValue: number | null;     // comparable-evidenced value (or guide price)
+  marketValueBasis: string;       // how marketValue was derived
+  targetYieldPct: number | null;  // the client's target gross yield
+  yieldMaxPrice: number | null;   // price at which rent hits the target yield
+  suggestedOffer: number | null;  // the lower of the two anchors
+};
+
 export type OutlineData = {
   address: string;
   price: number | null;
   monthlyRent: number | null;
   grossYield: number;
   netYield: number;
+  indicative: IndicativeOffer;
   projected5yr: number | null;
   fitPct: number;
   fitMet: number;
@@ -40,6 +54,45 @@ export function outlineRecommendation(deal: Deal): string {
     return `On the numbers this looks worth a closer look (around ${fin.grossYield.toFixed(1)}% gross yield). Shall I arrange a viewing and run the full due diligence?`;
   }
   return 'This one looks worth a closer look. Shall I arrange a viewing and run the full due diligence?';
+}
+
+/**
+ * Indicative, pre-condition offer from desktop data only:
+ *  - market value: the average of evidenced sales comparables, else the guide
+ *    price (clearly labelled);
+ *  - yield-max price: the price at which the estimated rent achieves the
+ *    client's target gross yield;
+ *  - suggested opening offer: the lower of the two (you pay no more than the
+ *    market supports, nor more than your yield brief allows).
+ * Always subject to the viewing + refurb assessment.
+ */
+export function computeIndicativeOffer(deal: Deal): IndicativeOffer {
+  const fin = computeFinancials(deal);
+
+  const compValues = deal.salesComps
+    .map((c) => parseMoney(c.value))
+    .filter((n): n is number => n != null && n > 0);
+  let marketValue: number | null = null;
+  let marketValueBasis = 'No comparables or guide price yet';
+  if (compValues.length > 0) {
+    marketValue = Math.round(compValues.reduce((a, b) => a + b, 0) / compValues.length);
+    marketValueBasis = `Average of ${compValues.length} sales comparable${compValues.length > 1 ? 's' : ''}`;
+  } else {
+    const guide = parseMoney(deal.property.askingPrice) ?? parseMoney(deal.financials.purchasePrice);
+    if (guide) {
+      marketValue = guide;
+      marketValueBasis = 'Guide / asking price (no comparables entered yet)';
+    }
+  }
+
+  const targetYieldPct = parseYieldTarget(deal.criteria.targetYield);
+  const yieldMaxPrice =
+    fin.annualRent > 0 && targetYieldPct ? Math.round(fin.annualRent / (targetYieldPct / 100)) : null;
+
+  const anchors = [marketValue, yieldMaxPrice].filter((n): n is number => n != null && n > 0);
+  const suggestedOffer = anchors.length > 0 ? Math.min(...anchors) : null;
+
+  return { marketValue, marketValueBasis, targetYieldPct, yieldMaxPrice, suggestedOffer };
 }
 
 export function buildOutline(deal: Deal): OutlineData {
@@ -82,6 +135,7 @@ export function buildOutline(deal: Deal): OutlineData {
     monthlyRent,
     grossYield: fin.grossYield,
     netYield: fin.netYield,
+    indicative: computeIndicativeOffer(deal),
     projected5yr,
     fitPct: fit.pct,
     fitMet: fit.met,
