@@ -102,15 +102,33 @@ export function computeGdv(deal: Deal): GdvResult | null {
   };
 }
 
+/** Where the annual rent-growth rate came from. 'local' is reserved for a future
+ *  ONS regional/county rent-trend feed (see the open-data backlog). */
+export type RentGrowthSource = 'local' | 'manual' | 'default';
+
 export type RentEstimate = {
   estimate: number; // rounded to nearest £25 pcm
   rawEstimate: number;
   growthPctUsed: number; // annual % applied
+  growthSource: RentGrowthSource;
   asOfMonth: string; // month the estimate is uplifted to
   compCount: number;
 };
 
-const DEFAULT_RENT_GROWTH_PCT = 4;
+export const DEFAULT_RENT_GROWTH_PCT = 4;
+
+/**
+ * Resolve the annual rent-growth rate for a deal. Prefers a local feed (county
+ * /regional, not yet wired - see project_local_rent_trend), then the partner's
+ * manual assumption on Growth Drivers, then the 4% default.
+ */
+export function resolveRentGrowth(deal: Deal): { pct: number; source: RentGrowthSource } {
+  const local = deal.publicData?.rentTrend?.annualGrowthPct;
+  if (local != null && Number.isFinite(local)) return { pct: local, source: 'local' };
+  const manual = parseFloat(deal.growth.rentalGrowthPct);
+  if (Number.isFinite(manual) && manual > 0) return { pct: manual, source: 'manual' };
+  return { pct: DEFAULT_RENT_GROWTH_PCT, source: 'default' };
+}
 
 function monthsBetween(from: string, to: string): number {
   const [fy, fm] = from.split('-').map(Number);
@@ -126,7 +144,7 @@ function monthsBetween(from: string, to: string): number {
  * available, else the most recent comp month. Returns null with no usable comps.
  */
 export function estimateRent(deal: Deal): RentEstimate | null {
-  const growthPct = parseFloat(deal.growth.rentalGrowthPct) || DEFAULT_RENT_GROWTH_PCT;
+  const { pct: growthPct, source: growthSource } = resolveRentGrowth(deal);
   const g = growthPct / 100;
 
   const rows = deal.rentalComps
@@ -147,6 +165,7 @@ export function estimateRent(deal: Deal): RentEstimate | null {
     estimate: roundTo(rawEstimate, 25),
     rawEstimate,
     growthPctUsed: growthPct,
+    growthSource,
     asOfMonth,
     compCount: rows.length,
   };

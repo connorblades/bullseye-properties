@@ -434,8 +434,9 @@ function RentEstimateSummary({ deal }: { deal: Deal }) {
         <div className="text-2xl font-black text-navy">{fmtMoney(rent.estimate)}</div>
       </div>
       <div className="text-xs text-ink-muted">
-        {rent.compCount} like-for-like comp{rent.compCount > 1 ? 's' : ''}, uplifted {rent.growthPctUsed}% a year to {rent.asOfMonth},
-        rounded to the nearest £25. Set the rental growth on Growth Drivers to change the uplift.
+        {rent.compCount} like-for-like comp{rent.compCount > 1 ? 's' : ''}, uplifted {rent.growthPctUsed}% a year
+        {rent.growthSource === 'local' ? ' (local rent trend)' : rent.growthSource === 'manual' ? ' (your assumption)' : ' (default)'} to {rent.asOfMonth},
+        rounded to the nearest £25.{rent.growthSource === 'default' ? ' Set the rental growth on Growth Drivers to change the uplift.' : ''}
       </div>
     </div>
   );
