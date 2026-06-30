@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOutline, outlineRecommendation } from '@/lib/outline';
+import { buildOutline, outlineRecommendation, computeIndicativeOffer } from '@/lib/outline';
 import { emptyDeal } from '@/lib/deal-store';
 
 function browning() {
@@ -40,5 +40,44 @@ describe('buildOutline', () => {
   it('contains no em or en dashes (house style)', () => {
     const o = buildOutline(browning());
     expect(o.recommendation).not.toMatch(/[—–]/);
+  });
+});
+
+describe('computeIndicativeOffer', () => {
+  it('uses the average of sales comparables for market value', () => {
+    const deal = browning();
+    deal.salesComps = [
+      { id: 's1', address: '8 Browning St', detail: 'Sold', value: '£120,000' },
+      { id: 's2', address: '21 Tennyson Ave', detail: 'Sold', value: '£130,000' },
+    ];
+    const o = computeIndicativeOffer(deal);
+    expect(o.marketValue).toBe(125000);
+    expect(o.marketValueBasis).toMatch(/2 sales comparable/i);
+  });
+
+  it('falls back to the guide price when there are no comparables', () => {
+    const o = computeIndicativeOffer(browning()); // askingPrice 120000, no comps
+    expect(o.marketValue).toBe(120000);
+    expect(o.marketValueBasis).toMatch(/guide/i);
+  });
+
+  it('derives the yield-max price and takes the lower anchor as the suggested offer', () => {
+    // rent 800pcm => 9600/yr; 7% target => max 137,143; market value 120,000 => offer = 120,000
+    const o = computeIndicativeOffer(browning());
+    expect(o.targetYieldPct).toBe(7);
+    expect(o.yieldMaxPrice).toBe(137143);
+    expect(o.suggestedOffer).toBe(120000);
+  });
+
+  it('returns nulls when there is nothing to anchor on', () => {
+    const deal = browning();
+    deal.salesComps = [];
+    deal.property.askingPrice = '';
+    deal.financials.purchasePrice = '';
+    deal.financials.monthlyRent = '';
+    deal.criteria.targetYield = '';
+    const o = computeIndicativeOffer(deal);
+    expect(o.suggestedOffer).toBeNull();
+    expect(o.marketValue).toBeNull();
   });
 });

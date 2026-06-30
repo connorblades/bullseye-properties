@@ -70,6 +70,26 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
           ))}
         </div>
 
+        {/* Indicative offer (pre-condition) */}
+        {o.indicative.suggestedOffer != null && (
+          <div className="rounded-2xl bg-navy text-white p-5 mb-8">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-white/70 mb-1">Indicative opening offer</div>
+            <div className="text-3xl font-black">{fmtOutlineGBP(o.indicative.suggestedOffer)}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs text-white/85">
+              {o.indicative.marketValue != null && (
+                <div>Estimated value: <span className="font-semibold">{fmtOutlineGBP(o.indicative.marketValue)}</span> ({o.indicative.marketValueBasis.toLowerCase()})</div>
+              )}
+              {o.indicative.yieldMaxPrice != null && o.indicative.targetYieldPct != null && (
+                <div>Max for {o.indicative.targetYieldPct}% target yield: <span className="font-semibold">{fmtOutlineGBP(o.indicative.yieldMaxPrice)}</span></div>
+              )}
+            </div>
+            <p className="text-[11px] text-white/70 mt-3 leading-relaxed">
+              A desktop estimate from comparables and your yield target. It is the starting point only and is subject to
+              the viewing and refurbishment assessment, which may move it down.
+            </p>
+          </div>
+        )}
+
         {/* Why it fits */}
         {o.fitApplicable > 0 && (
           <div className="mb-8">
