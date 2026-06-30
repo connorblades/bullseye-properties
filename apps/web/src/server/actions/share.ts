@@ -9,6 +9,9 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { db } from '@/server/db/client';
+import { dealReportVersions } from '@/server/db/schema';
 import { requireTenant } from '@/server/auth/tenant';
 import { loadDeal } from '@/server/actions/deals';
 import { buildShareUrl } from '@/lib/share-url';
@@ -23,6 +26,36 @@ import {
 
 function siteUrl(): string {
   return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+}
+
+/** Latest successfully-rendered report version for a deal, or null. Tenant-scoped. */
+async function latestRenderedReport(
+  tenantId: string,
+  dealId: string,
+): Promise<{ id: string; version: number } | null> {
+  const rows = await db
+    .select({ id: dealReportVersions.id, version: dealReportVersions.version })
+    .from(dealReportVersions)
+    .where(
+      and(
+        eq(dealReportVersions.tenantId, tenantId),
+        eq(dealReportVersions.dealId, dealId),
+        eq(dealReportVersions.status, 'rendered'),
+        isNotNull(dealReportVersions.pdfStoragePath),
+      ),
+    )
+    .orderBy(desc(dealReportVersions.version))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Whether a deal has a rendered report yet - used by the share page to gate
+ * report-link creation. Tenant-scoped.
+ */
+export async function dealHasRenderedReport(dealId: string): Promise<boolean> {
+  const { tenantId } = await requireTenant();
+  return (await latestRenderedReport(tenantId, dealId)) !== null;
 }
 
 export interface ShareLinkView {
@@ -56,6 +89,16 @@ export async function createDealShareLink(
   const deal = await loadDeal(input.dealId); // tenant-scoped; null if not theirs
   if (!deal) throw new Error('Deal not found');
 
+  // Report links pin a specific rendered version, so the investor always sees
+  // exactly what was current when the link was created. Default to the latest
+  // rendered version when the caller did not pin one.
+  let reportVersionId = input.reportVersionId ?? null;
+  if (input.kind === 'report' && !reportVersionId) {
+    const latest = await latestRenderedReport(tenantId, input.dealId);
+    if (!latest) throw new Error('No rendered report yet. Generate one in Stage 14 first.');
+    reportVersionId = latest.id;
+  }
+
   let expiresAt: Date | null | undefined;
   if (input.expiresInDays === undefined) {
     expiresAt = undefined; // store default 90 days
@@ -72,7 +115,7 @@ export async function createDealShareLink(
     createdBy: userId,
     label: input.label ?? null,
     recipientEmail: input.recipientEmail ?? null,
-    reportVersionId: input.reportVersionId ?? null,
+    reportVersionId,
     expiresAt,
   });
 

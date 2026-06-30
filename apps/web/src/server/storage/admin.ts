@@ -44,3 +44,14 @@ export async function signDealPackUrl(storagePath: string, expiresInSeconds = 36
   if (error || !data) throw new Error(`Could not sign deal-pack URL: ${error?.message ?? 'unknown'}`);
   return data.signedUrl;
 }
+
+/**
+ * Download a stored deal pack as a Buffer. Used by the token-gated investor PDF
+ * route (M4-T3) so the storage signed URL is never exposed to the recipient;
+ * they only ever see the share-token URL.
+ */
+export async function downloadDealPack(storagePath: string): Promise<Buffer> {
+  const { data, error } = await supabaseAdmin().storage.from(DEAL_PACKS_BUCKET).download(storagePath);
+  if (error || !data) throw new Error(`Could not download deal pack: ${error?.message ?? 'unknown'}`);
+  return Buffer.from(await data.arrayBuffer());
+}

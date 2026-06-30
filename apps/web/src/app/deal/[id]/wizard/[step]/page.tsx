@@ -14,6 +14,7 @@ import {
 } from '@/components/public-data-panel';
 import { Receipt, ExternalLink, Link2 } from 'lucide-react';
 import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
+import { ShareLinkManager } from '@/components/share-link-manager';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
 import { pullPublicData } from '@/server/actions/public-data';
@@ -1324,7 +1325,6 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
 }
 
 function DeliverPanel({ deal }: { deal: Deal }) {
-  const shareUrl = `app.bullseyeproperties.co.uk/r/${deal.id}/${deal.id.slice(-6)}`;
   const [pdf, setPdf] = useState<{ url: string; version: number; filename: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -1338,27 +1338,15 @@ function DeliverPanel({ deal }: { deal: Deal }) {
   }, [deal.id]);
 
   return (
-    <div className="card p-8">
-      <div className="text-sm font-bold text-success bg-success-light inline-block px-3 py-1.5 rounded mb-4">
-        {pdf ? `Report ready · v${pdf.version}` : 'Report'}
-      </div>
-      <h2 className="text-xl font-black text-ink mb-5">Send to {deal.client || '(no client yet)'}</h2>
-      <div className="space-y-3 mb-6">
-        <div className="flex items-center justify-between p-4 bg-bg rounded-lg">
-          <div>
-            <div className="font-bold text-ink text-sm">Shareable link</div>
-            <div className="text-xs text-ink-mid font-mono">{shareUrl}</div>
-          </div>
-          <button
-            onClick={() => navigator.clipboard?.writeText(shareUrl)}
-            className="btn-secondary text-xs"
-          >
-            Copy
-          </button>
+    <div className="space-y-6">
+      <div className="card p-8">
+        <div className="text-sm font-bold text-success bg-success-light inline-block px-3 py-1.5 rounded mb-4">
+          {pdf ? `Report ready · v${pdf.version}` : 'Report'}
         </div>
+        <h2 className="text-xl font-black text-ink mb-5">Send to {deal.client || '(no client yet)'}</h2>
         <div className="flex items-center justify-between p-4 bg-bg rounded-lg">
           <div>
-            <div className="font-bold text-ink text-sm">PDF download</div>
+            <div className="font-bold text-ink text-sm">Your copy (signed PDF download)</div>
             <div className="text-xs text-ink-mid">
               {loading ? 'Locating latest report...' : pdf ? pdf.filename : 'No rendered report yet. Generate one in Stage 14.'}
             </div>
@@ -1371,11 +1359,25 @@ function DeliverPanel({ deal }: { deal: Deal }) {
             <button disabled className="btn-secondary text-xs opacity-50">Download</button>
           )}
         </div>
+        <p className="text-xs text-ink-muted mt-3">
+          The download above is a short-lived signed link for your own records. To send the report to an investor, create
+          a revocable share link below.
+        </p>
       </div>
-      <p className="text-xs text-ink-muted italic mb-4">
-        Tracked share links, engagement analytics and partner-led delivery prompts land in M4. The PDF link above is a short-lived signed download.
-      </p>
-      <button className="btn-primary">Email to client</button>
+
+      <ShareLinkManager
+        dealId={deal.id}
+        kind="report"
+        title="Investor share links (Report 2)"
+        description="Revocable, expiring links to the full Standard Deal Report. Each link is pinned to the report version current when you create it, opens a clean investor view, and tracks opens and downloads."
+        disabledReason={
+          loading
+            ? 'Checking for a rendered report...'
+            : pdf
+              ? undefined
+              : 'Generate the full report in Stage 14 first, then create a share link here.'
+        }
+      />
     </div>
   );
 }

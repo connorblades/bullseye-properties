@@ -4,6 +4,7 @@ import { resolveOutlineAccess } from '@/server/share/access';
 import { recordShareAccess, hashIp } from '@/server/share/tokens';
 import { buildOutline, fmtOutlineGBP } from '@/lib/outline';
 import { Logo } from '@/components/logo';
+import { ShareNotice } from '@/components/share-notice';
 
 /**
  * Public, read-only Outline Deal page (M5; tokenised in M4-T2) - the shareable
@@ -18,7 +19,16 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
   const access = await resolveOutlineAccess(params.id);
   if (access.status === 'not_found') notFound();
   if (access.status === 'revoked' || access.status === 'expired') {
-    return <InactiveLink reason={access.status} />;
+    return (
+      <ShareNotice
+        title="This link is no longer active"
+        body={`${
+          access.status === 'expired'
+            ? 'This outline link has expired.'
+            : 'This outline link has been revoked.'
+        } Please contact your Bullseye partner for an up-to-date link.`}
+      />
+    );
   }
 
   const { deal, partner, token } = access;
@@ -148,26 +158,6 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
           assessment and financial detail follow in the complete report after a viewing. Questions? Reply to the email this
           was sent in, or speak to your partner directly.
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** Shown when a share link has been revoked or has expired. */
-function InactiveLink({ reason }: { reason: 'revoked' | 'expired' }) {
-  return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-6">
-      <div className="max-w-md text-center">
-        <div className="flex justify-center mb-6">
-          <Logo size="md" />
-        </div>
-        <h1 className="text-2xl font-black text-ink mb-3">This link is no longer active</h1>
-        <p className="text-sm text-ink-mid leading-relaxed">
-          {reason === 'expired'
-            ? 'This outline link has expired.'
-            : 'This outline link has been revoked.'}{' '}
-          Please contact your Bullseye partner for an up-to-date link.
-        </p>
       </div>
     </div>
   );
