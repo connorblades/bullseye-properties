@@ -54,7 +54,11 @@ export default async function ReportSharePage({ params }: { params: { token: str
   const { deal, partner } = access;
   const o = buildOutline(deal);
   const pct = (n: number) => `${n.toFixed(1)}%`;
-  const pdfHref = `/r/${params.token}/pdf`;
+  // The inline embed (pdfView) auto-fetches the PDF to render it; we do NOT want
+  // that to count as a download. Only an explicit click (pdfDownload, ?dl=1) is
+  // logged as a download by the route.
+  const pdfView = `/r/${params.token}/pdf`;
+  const pdfDownload = `${pdfView}?dl=1`;
 
   const tiles: { label: string; value: string }[] = [
     { label: 'Guide price', value: o.price != null ? fmtOutlineGBP(o.price) : 'TBC' },
@@ -68,7 +72,7 @@ export default async function ReportSharePage({ params }: { params: { token: str
       <div className="max-w-4xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
           <Logo size="md" />
-          <a href={pdfHref} target="_blank" rel="noopener noreferrer" className="btn-primary text-xs inline-flex items-center gap-1.5">
+          <a href={pdfDownload} target="_blank" rel="noopener noreferrer" className="btn-primary text-xs inline-flex items-center gap-1.5">
             <Download size={14} /> Download PDF
           </a>
         </div>
@@ -90,13 +94,13 @@ export default async function ReportSharePage({ params }: { params: { token: str
 
         {/* Inline PDF view */}
         <div className="rounded-2xl border border-black/[0.1] overflow-hidden mb-6 bg-bg" style={{ height: '80vh' }}>
-          <object data={pdfHref} type="application/pdf" className="w-full h-full">
+          <object data={pdfView} type="application/pdf" className="w-full h-full">
             <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-3">
               <FileText size={28} className="text-navy" />
               <p className="text-sm text-ink-mid">
                 Your browser cannot display the PDF inline.
               </p>
-              <a href={pdfHref} target="_blank" rel="noopener noreferrer" className="btn-primary text-xs inline-flex items-center gap-1.5">
+              <a href={pdfDownload} target="_blank" rel="noopener noreferrer" className="btn-primary text-xs inline-flex items-center gap-1.5">
                 <Download size={14} /> Download the full report
               </a>
             </div>
