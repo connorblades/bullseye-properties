@@ -58,6 +58,7 @@ export type Comp = {
   address: string;
   detail: string;
   value: string;
+  floorArea?: string; // sqft - sales comps only; drives the price-per-sqft GDV
 };
 
 export type RefurbItem = {
