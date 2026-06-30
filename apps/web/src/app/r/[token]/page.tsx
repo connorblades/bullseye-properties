@@ -14,7 +14,10 @@ import { ShareNotice } from '@/components/share-notice';
  * token-gated route so the storage URL is never exposed.
  */
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Standard Deal Report · Bullseye Properties' };
+export const metadata = {
+  title: 'Standard Deal Report · Bullseye Properties',
+  robots: { index: false, follow: false },
+};
 
 export default async function ReportSharePage({ params }: { params: { token: string } }) {
   const access = await resolveReportAccess(params.token);

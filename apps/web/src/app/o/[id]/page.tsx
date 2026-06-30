@@ -13,7 +13,10 @@ import { ShareNotice } from '@/components/share-notice';
  * revocable share token first, falling back to the legacy raw-ULID link.
  */
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Outline Deal · Bullseye Properties' };
+export const metadata = {
+  title: 'Outline Deal · Bullseye Properties',
+  robots: { index: false, follow: false },
+};
 
 export default async function OutlineSharePage({ params }: { params: { id: string } }) {
   const access = await resolveOutlineAccess(params.id);

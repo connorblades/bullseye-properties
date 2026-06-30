@@ -1,21 +1,49 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { updateSession } from '@/server/auth/middleware';
+import { rateLimit } from '@/server/security/rate-limit';
+
+/** Per-IP cap on the unauthenticated public share surfaces (M4-T5). */
+const SHARE_RATE_LIMIT = 60;
+const SHARE_RATE_WINDOW_MS = 60_000;
+
+function clientIp(request: NextRequest): string {
+  const fwd = request.headers.get('x-forwarded-for');
+  if (fwd) return fwd.split(',')[0]!.trim();
+  return request.headers.get('x-real-ip')?.trim() || 'unknown';
+}
 
 /**
- * Middleware: refresh the auth session on every request and gate protected
- * routes. Unauthenticated requests to gated routes redirect to /login.
+ * Middleware: rate-limit the public share surfaces, refresh the auth session on
+ * every request, and gate protected routes. Unauthenticated requests to gated
+ * routes redirect to /login.
  *
  * Reference: https://supabase.com/docs/guides/auth/server-side/nextjs
  */
 export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // Token-gated public delivery surfaces (outline + report, incl. their PDF
+  // routes). Rate-limit per IP before any DB work or PDF render can run, then
+  // let the request through - access is gated by the share token itself, not
+  // by an auth session.
+  const isShareSurface = path.startsWith('/o/') || path.startsWith('/r/');
+  if (isShareSurface) {
+    const rl = rateLimit(`share:${clientIp(request)}`, SHARE_RATE_LIMIT, SHARE_RATE_WINDOW_MS, Date.now());
+    if (!rl.ok) {
+      return new NextResponse('Too many requests. Please slow down and try again shortly.', {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)), 'Cache-Control': 'no-store' },
+      });
+    }
+    return NextResponse.next({ request });
+  }
+
   const { response, user } = await updateSession(request);
 
-  const path = request.nextUrl.pathname;
   const isPublic =
     path === '/' ||
     path.startsWith('/login') ||
     path.startsWith('/auth') ||
-    path.startsWith('/r/') ||  // investor share link viewer (token-gated separately)
     path.startsWith('/_next') ||
     path.startsWith('/api/public');
 
