@@ -23,16 +23,26 @@ export type OutlineAccess =
   | { status: 'not_found' };
 
 export async function resolveOutlineAccess(segment: string): Promise<OutlineAccess> {
-  const res = await resolveShareToken(segment, { kind: 'outline' });
-  if (res.ok) {
+  // Token resolution is wrapped so that a token-store outage (e.g. migration
+  // 0008 not yet applied in this environment) degrades to the legacy raw-ULID
+  // path rather than 500'ing a public delivery page.
+  let res: Awaited<ReturnType<typeof resolveShareToken>> | null = null;
+  try {
+    res = await resolveShareToken(segment, { kind: 'outline' });
+  } catch {
+    res = null;
+  }
+
+  if (res?.ok) {
     const loaded = await loadDealPublic(res.token.dealId);
     if (!loaded) return { status: 'not_found' };
     return { status: 'ok', ...loaded, token: res.token };
   }
-  if (res.reason === 'revoked') return { status: 'revoked' };
-  if (res.reason === 'expired') return { status: 'expired' };
+  if (res && !res.ok && res.reason === 'revoked') return { status: 'revoked' };
+  if (res && !res.ok && res.reason === 'expired') return { status: 'expired' };
 
-  // Unrecognised as a token: fall back to the legacy raw-ULID outline link.
+  // Unrecognised as a token (or token store unavailable): fall back to the
+  // legacy raw-ULID outline link.
   const legacy = await loadDealPublic(segment);
   if (legacy) return { status: 'ok', ...legacy, token: null };
   return { status: 'not_found' };

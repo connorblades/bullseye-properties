@@ -60,4 +60,12 @@ describe('resolveOutlineAccess', () => {
     mockLoad.mockResolvedValue(null);
     expect((await resolveOutlineAccess('nope')).status).toBe('not_found');
   });
+
+  it('degrades to the legacy path when the token store throws (e.g. table missing)', async () => {
+    mockResolve.mockRejectedValue(new Error('relation "share_tokens" does not exist'));
+    mockLoad.mockResolvedValue(fakeLoaded);
+    const res = await resolveOutlineAccess('legacy-ulid');
+    expect(res.status).toBe('ok');
+    if (res.status === 'ok') expect(res.token).toBeNull();
+  });
 });
