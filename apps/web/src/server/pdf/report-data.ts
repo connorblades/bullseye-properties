@@ -24,6 +24,33 @@ export type ReportData = {
   proj: GrowthProjection;
 };
 
+/**
+ * Strip internal `[VERIFY: ...]` partner prompts from a narrative before it
+ * reaches the investor PDF. These are editorial notes the AI adds when a fact is
+ * missing (the partner resolves them in the wizard); they must never be printed
+ * in the delivered report. Markers can span lines, so the class negation
+ * (which includes newlines) matches multi-line blocks. Leftover blank lines and
+ * doubled spaces are tidied up.
+ */
+export function stripVerifyMarkers(text: string): string {
+  return text
+    .replace(/\[VERIFY:[^\]]*\]/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+
+function sanitizeNarratives(
+  narratives: Partial<Record<SectionKey, string>>,
+): Partial<Record<SectionKey, string>> {
+  const out: Partial<Record<SectionKey, string>> = {};
+  for (const [k, v] of Object.entries(narratives)) {
+    if (typeof v === 'string') out[k as SectionKey] = stripVerifyMarkers(v);
+  }
+  return out;
+}
+
 export function buildReportData(args: {
   deal: Deal;
   reference: string;
@@ -39,7 +66,7 @@ export function buildReportData(args: {
     generatedOn: args.generatedOn,
     partner: args.partner,
     deal: args.deal,
-    narratives: args.narratives ?? args.deal.narratives ?? {},
+    narratives: sanitizeNarratives(args.narratives ?? args.deal.narratives ?? {}),
     fin: computeFinancials(args.deal),
     proj: computeGrowthProjection(args.deal),
   };
