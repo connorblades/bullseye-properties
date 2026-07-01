@@ -1257,8 +1257,17 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
         manualDraft: drafts[key].manualDraft,
       }));
       const res = await publishReport(deal.id, payload);
+      if (!res.ok) {
+        setError(`Publish failed: ${res.error}`);
+        setPhase('review');
+        return;
+      }
       if (res.renderError) {
-        setError(`Draft published, but the PDF render failed: ${res.renderError}. You can continue and retry the render from delivery.`);
+        // The narratives were saved, but there is no PDF to deliver, so stay on
+        // review with the real reason rather than advancing to an empty delivery.
+        setError(`Report saved, but the PDF render failed: ${res.renderError}. Fix the flagged data and republish.`);
+        setPhase('review');
+        return;
       }
       setPhase('published');
     } catch (e) {

@@ -35,61 +35,72 @@ async function nextReportVersion(tenantId: string, dealId: string): Promise<numb
   return (rows[0]?.v ?? 0) + 1;
 }
 
-export async function publishReport(dealId: string, sections: PublishSection[]) {
-  const { tenantId, userId } = await requireTenant();
-  const row = await loadDeal(dealId);
-  if (!row) throw new Error('Deal not found');
+export type PublishResult =
+  | { ok: true; versionId: string; version: number; pdfPath: string | null; renderError: string | null }
+  | { ok: false; error: string };
 
-  const version = await nextReportVersion(tenantId, dealId);
-  const versionId = `drv-${ulid()}`;
+export async function publishReport(dealId: string, sections: PublishSection[]): Promise<PublishResult> {
+  // The whole pre-render write path is wrapped so a failure returns the real
+  // message to the UI instead of throwing (Next masks thrown Server Action
+  // errors in production as a generic "Server Components render" message).
+  try {
+    const { tenantId, userId } = await requireTenant();
+    const row = await loadDeal(dealId);
+    if (!row) return { ok: false, error: 'Deal not found' };
 
-  // Draft version row; the render step below fills pdf_storage_path + flips
-  // status to 'rendered' (or 'failed').
-  await db.insert(dealReportVersions).values({
-    id: versionId,
-    tenantId,
-    dealId,
-    version,
-    inputsSnapshot: (row.inputs as Record<string, unknown>) ?? {},
-    status: 'draft',
-    renderedBy: userId,
-  });
+    const version = await nextReportVersion(tenantId, dealId);
+    const versionId = `drv-${ulid()}`;
 
-  // One append-only audit row per section (raw AI response + partner edits diff).
-  for (const s of sections) {
-    await recordGeneration({
+    // Draft version row; the render step below fills pdf_storage_path + flips
+    // status to 'rendered' (or 'failed').
+    await db.insert(dealReportVersions).values({
+      id: versionId,
       tenantId,
       dealId,
-      dealReportVersionId: versionId,
-      sectionKey: s.section,
-      modelId: s.model || 'manual',
-      promptVersionHash: s.promptVersionHash,
-      rawResponse: s.raw,
-      editedText: s.edited,
-      inputTokens: s.inputTokens,
-      outputTokens: s.outputTokens,
-      generatedBy: userId,
+      version,
+      inputsSnapshot: (row.inputs as Record<string, unknown>) ?? {},
+      status: 'draft',
+      renderedBy: userId,
     });
-  }
 
-  // Persist the published narratives onto the deal BEFORE rendering (the render
-  // reloads the deal and reads deal.narratives).
-  const narratives = Object.fromEntries(sections.map((s) => [s.section, s.edited]));
-  await updateDealById(dealId, { narratives });
+    // One append-only audit row per section (raw AI response + partner edits diff).
+    for (const s of sections) {
+      await recordGeneration({
+        tenantId,
+        dealId,
+        dealReportVersionId: versionId,
+        sectionKey: s.section,
+        modelId: s.model || 'manual',
+        promptVersionHash: s.promptVersionHash,
+        rawResponse: s.raw,
+        editedText: s.edited,
+        inputTokens: s.inputTokens,
+        outputTokens: s.outputTokens,
+        generatedBy: userId,
+      });
+    }
 
-  // Render the 16-section PDF and store it. Audit rows are already committed, so
-  // a render failure does not lose the published draft - the version row is
-  // marked 'failed' and the partner can retry from delivery.
-  let pdfPath: string | null = null;
-  let renderError: string | null = null;
-  try {
-    const stored = await generateAndStoreReport({ tenantId, dealId, versionId, version });
-    pdfPath = stored.pdfPath;
+    // Persist the published narratives onto the deal BEFORE rendering (the render
+    // reloads the deal and reads deal.narratives).
+    const narratives = Object.fromEntries(sections.map((s) => [s.section, s.edited]));
+    await updateDealById(dealId, { narratives });
+
+    // Render the 16-section PDF and store it. Audit rows are already committed, so
+    // a render failure does not lose the published draft - the version row is
+    // marked 'failed' and the partner can retry from delivery.
+    let pdfPath: string | null = null;
+    let renderError: string | null = null;
+    try {
+      const stored = await generateAndStoreReport({ tenantId, dealId, versionId, version });
+      pdfPath = stored.pdfPath;
+    } catch (e) {
+      renderError = e instanceof Error ? `${e.name}: ${e.message}` : 'PDF render failed';
+    }
+
+    return { ok: true, versionId, version, pdfPath, renderError };
   } catch (e) {
-    renderError = e instanceof Error ? e.message : 'PDF render failed';
+    return { ok: false, error: e instanceof Error ? `${e.name}: ${e.message}` : 'Publish failed' };
   }
-
-  return { versionId, version, pdfPath, renderError };
 }
 
 /**
