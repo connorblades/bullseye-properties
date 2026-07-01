@@ -18,6 +18,10 @@ import {
   skirtingTakeoff,
   stepsForProperty,
   summariseRefurb,
+  buildInspectionLines,
+  inspectionRefurb,
+  inspectionProgress,
+  type InspectionState,
 } from '@/lib/inspection';
 
 describe('INSPECTION_STEPS model', () => {
@@ -194,5 +198,46 @@ describe('measured take-offs', () => {
     const est = summariseRefurb(lines);
     expect(est.subtotal).toBe(lines.reduce((s, l) => s + l.total, 0));
     expect(est.contingency).toBe(MIN_CONTINGENCY_GBP); // small job -> £3k floor
+  });
+});
+
+describe('captured inspection aggregation', () => {
+  const state: InspectionState = {
+    rooms: [{ id: 'r1', name: 'Lounge', lengthM: 5, widthM: 4, heightM: 2.4, works: ['plaster'] }],
+    steps: {
+      windows: { rating: 4, cost: { quantity: 3 } }, // 3 windows -> 1350 + 450 = 1800
+      'consumer-unit': { rating: 3, cost: { quantity: 1 } }, // 150 + 350 = 500
+      'internal-damp': { rating: 5, cost: { roomId: 'r1', areaBasis: 'floor' } }, // 20 sqm damp-proofing
+      'ridge-tiles': { rating: 9 }, // rated fine, no cost captured -> no line
+    },
+  };
+
+  it('builds a line per priced step plus room take-offs, skipping un-priced steps', () => {
+    const lines = buildInspectionLines(state);
+    const labels = lines.map((l) => l.label);
+    expect(labels).toContain('Windows double-glazed');
+    expect(labels).toContain('Consumer unit (metal, double RCD)');
+    expect(labels).toContain('Internal damp (ground floor)');
+    expect(labels).toContain('Lounge: Plastering');
+    expect(labels).not.toContain('Ridge tiles'); // rated but not priced
+  });
+
+  it('prices an area step from the linked room floor area', () => {
+    const line = buildInspectionLines(state).find((l) => l.label === 'Internal damp (ground floor)');
+    // damp-proofing: 25 material + 45 labour per sqm; floor 20 sqm
+    expect(line?.material).toBe(500);
+    expect(line?.labour).toBe(900);
+  });
+
+  it('inspectionRefurb totals the lines and applies the contingency', () => {
+    const est = inspectionRefurb(state);
+    expect(est.subtotal).toBeGreaterThan(0);
+    expect(est.total).toBe(est.subtotal + est.contingency);
+  });
+
+  it('inspectionProgress counts rated/photographed/flagged steps', () => {
+    const p = inspectionProgress(state);
+    expect(p.done).toBe(4); // windows, consumer-unit, internal-damp, ridge-tiles all rated
+    expect(p.total).toBe(INSPECTION_STEPS.length);
   });
 });

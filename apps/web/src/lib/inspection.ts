@@ -456,3 +456,123 @@ export function refurbEstimate(
 ): RefurbEstimate {
   return summariseRefurb(items.map((i) => itemCost(i, book)));
 }
+
+// ── On-site capture model + aggregation (M6-T3) ─────────────────────────────
+//
+// What the walkthrough UI collects; the pure functions here turn it into cost
+// lines + the refurb estimate, so the UI stays a thin data-collector.
+
+/** A room measured on site, with the measured take-offs the partner selected. */
+export interface RoomEntry extends RoomDimensions {
+  id: string;
+  works?: RoomWork[];
+  includeCeiling?: boolean;
+}
+
+/** What the partner captured against one walkthrough step. */
+export interface StepCapture {
+  /** Condition score 1 (worst) - 10 (best). */
+  rating?: number;
+  notes?: string;
+  /** Meter reading / boiler pressure / etc. */
+  reading?: string;
+  /** A yes/no flag step (e.g. spray foam present, asbestos present). */
+  flagged?: boolean;
+  photos?: string[];
+  cost?: StepCostCapture;
+}
+
+export interface StepCostCapture {
+  /** Units for a 'unit'-priced step. */
+  quantity?: number;
+  /** Take the area for an 'area'-priced step from this room. */
+  roomId?: string;
+  /** Which of the room's areas to use (default floor). */
+  areaBasis?: 'floor' | 'wall' | 'ceiling';
+  /** Explicit area override (sqm), used ahead of roomId. */
+  areaSqm?: number;
+  overrideMaterial?: number;
+  overrideLabour?: number;
+}
+
+export interface InspectionState {
+  rooms: RoomEntry[];
+  /** Per-step capture, keyed by step.key. */
+  steps: Record<string, StepCapture>;
+}
+
+export function emptyInspection(): InspectionState {
+  return { rooms: [], steps: {} };
+}
+
+function areaFrom(capture: StepCostCapture, rooms: RoomEntry[]): number {
+  if (capture.areaSqm !== undefined) return Math.max(0, capture.areaSqm);
+  const room = rooms.find((r) => r.id === capture.roomId);
+  if (!room) return 0;
+  const g = roomGeometry(room);
+  if (capture.areaBasis === 'wall') return g.wallArea;
+  if (capture.areaBasis === 'ceiling') return g.ceilingArea;
+  return g.floorArea;
+}
+
+/**
+ * Turn a captured inspection into cost lines: the price-book cost of each
+ * cost-bearing step the partner priced, plus the measured take-offs for each
+ * room. Steps with no captured cost, or a zero quantity/area, contribute
+ * nothing.
+ */
+export function buildInspectionLines(
+  state: InspectionState,
+  steps: InspectionStep[] = INSPECTION_STEPS,
+  book: Record<string, PriceBookEntry> = PRICE_BOOK,
+): CostBreakdown[] {
+  const lines: CostBreakdown[] = [];
+  const byKey = new Map(steps.map((s) => [s.key, s]));
+
+  for (const [key, capture] of Object.entries(state.steps)) {
+    const step = byKey.get(key);
+    if (!step?.costMode || !step.priceKey || !capture.cost) continue;
+    const c = capture.cost;
+    const line = itemCost(
+      {
+        label: step.label,
+        priceKey: step.priceKey,
+        quantity: c.quantity,
+        areaSqm: step.costMode === 'area' ? areaFrom(c, state.rooms) : undefined,
+        overrideMaterial: c.overrideMaterial,
+        overrideLabour: c.overrideLabour,
+      },
+      book,
+    );
+    if (line.total > 0) lines.push(line);
+  }
+
+  for (const room of state.rooms) {
+    if (room.works?.length) {
+      lines.push(...roomTakeoff(room, room.works, { includeCeiling: room.includeCeiling }));
+    }
+  }
+
+  return lines;
+}
+
+/** The refurb estimate for a captured inspection (lines + contingency). */
+export function inspectionRefurb(
+  state: InspectionState,
+  steps: InspectionStep[] = INSPECTION_STEPS,
+  book: Record<string, PriceBookEntry> = PRICE_BOOK,
+): RefurbEstimate {
+  return summariseRefurb(buildInspectionLines(state, steps, book));
+}
+
+/** Walkthrough completeness: steps with a rating or a photo, out of the total. */
+export function inspectionProgress(
+  state: InspectionState,
+  steps: InspectionStep[] = INSPECTION_STEPS,
+): { done: number; total: number } {
+  const done = steps.filter((s) => {
+    const c = state.steps[s.key];
+    return c && (c.rating !== undefined || (c.photos?.length ?? 0) > 0 || c.flagged !== undefined);
+  }).length;
+  return { done, total: steps.length };
+}

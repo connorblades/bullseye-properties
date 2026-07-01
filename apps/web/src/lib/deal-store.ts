@@ -21,6 +21,7 @@ import {
   updateDealById,
 } from '@/server/actions/deals';
 import { defaultViewingChecklist } from './viewing';
+import type { InspectionState } from './inspection';
 
 export type StageRating = 'Good' | 'OK' | 'Issue' | '';
 
@@ -440,7 +441,7 @@ export type Deal = {
     photos: string[];
     // M5 viewing sub-states: before (prep), on (photo checklist), after
     // (assessment + comments + sign-off). `phase` is the partner's current tab.
-    phase?: 'pre' | 'on' | 'post';
+    phase?: 'pre' | 'on' | 'inspect' | 'post';
     prep?: string;
     summary?: string;            // post-viewing "further comments"
     outcome?: 'proceed' | 'pass' | 'undecided' | '';
@@ -448,6 +449,8 @@ export type Deal = {
     assessment?: string;         // post-viewing top-level assessment
     signedOffBy?: string;        // human-in-the-loop sign-off (gates client send)
     signedOffAt?: string;        // ISO timestamp of sign-off
+    // M6 guided inspection: rated walkthrough + measured rooms + refurb costs.
+    inspection?: InspectionState;
   };
 
   // Past viewings, newest last. The live `viewing` above is the working one;
