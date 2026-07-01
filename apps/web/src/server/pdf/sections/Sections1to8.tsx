@@ -2,9 +2,10 @@ import 'server-only';
 import React from 'react';
 import { View, Text, Image, Svg, Rect, Line } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
-import { SectionHeading, Card, Body } from '../components';
+import { SectionHeading, Card, Body, KeyRisks, RiskCallout } from '../components';
 import type { ReportData } from '../report-data';
 import { parseMoney, parseSoldMonth, hpiAdjustValue } from '@/lib/deal-calcs';
+import { keyRiskFlags, deriveRiskFlags } from '@/lib/risk-flags';
 
 /**
  * PDF Sections 1-8 (M3-T7).
@@ -187,6 +188,9 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
           <Stat label="Annual rent" value={fmtGBP(fin.annualRent)} width="32%" />
         </View>
       </Card>
+
+      {/* Key risks at a glance (Report v2) */}
+      <KeyRisks flags={keyRiskFlags(deal)} style={{ marginTop: 10 }} />
 
       {/* ===================== SECTION 2: WHY THIS PROPERTY FITS ===================== */}
       <SectionHeading index={2} title="Why this property fits" breakPage />
@@ -641,6 +645,11 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
 
           {pub?.flood ? (
             <View style={{ marginBottom: 8 }}>
+              {deriveRiskFlags(deal)
+                .filter((f) => f.title.startsWith('Flood') && (f.level === 'red' || f.level === 'amber'))
+                .map((f, i) => (
+                  <RiskCallout key={i} flag={f} />
+                ))}
               <Text style={{ fontFamily: FONTS.body, fontSize: 8, fontWeight: 700, color: C.inkMuted, marginBottom: 2 }}>
                 FLOOD RISK
               </Text>
