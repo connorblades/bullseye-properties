@@ -2,6 +2,7 @@ import 'server-only';
 import React from 'react';
 import { View, Text, Svg, Path, Circle } from '@react-pdf/renderer';
 import { C, FONTS, DISCLOSURE_FOOTER } from './tokens';
+import type { RiskFlag, RiskLevel } from '@/lib/risk-flags';
 
 /** Partner identity rendered in the page header + Section 16. */
 export type PartnerIdentity = {
@@ -206,5 +207,64 @@ export function Prose({ text, style }: { text: string; style?: object }) {
         </Text>
       ))}
     </>
+  );
+}
+
+// ─── Risk flags (Report v2) ─────────────────────────────────────────────────
+
+function riskColors(level: RiskLevel): { fg: string; bg: string; border: string; label: string } {
+  switch (level) {
+    case 'red':
+      return { fg: '#b91c1c', bg: C.redLight, border: C.red, label: 'RISK' };
+    case 'amber':
+      return { fg: '#b45309', bg: C.amberLight, border: C.amber, label: 'WATCH' };
+    case 'good':
+      return { fg: C.successDark, bg: C.successLight, border: C.success, label: 'OK' };
+    default:
+      return { fg: C.navy, bg: '#eaf1fb', border: C.navyLight, label: 'NOTE' };
+  }
+}
+
+/** A single colour-coded risk callout (left accent bar + title + detail). */
+export function RiskCallout({ flag, style }: { flag: RiskFlag; style?: object }) {
+  const c = riskColors(flag.level);
+  return (
+    <View
+      wrap={false}
+      style={{
+        flexDirection: 'row',
+        backgroundColor: c.bg,
+        borderLeftWidth: 3,
+        borderLeftColor: c.border,
+        borderRadius: 4,
+        padding: 8,
+        marginBottom: 6,
+        ...style,
+      }}
+    >
+      <View style={{ width: 42, flexShrink: 0 }}>
+        <Text style={{ fontFamily: FONTS.body, fontSize: 6.5, fontWeight: 700, letterSpacing: 0.8, color: c.fg }}>{c.label}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontFamily: FONTS.body, fontSize: 9, fontWeight: 700, color: c.fg }}>{flag.title}</Text>
+        <Text style={{ fontFamily: FONTS.body, fontSize: 8, lineHeight: 1.4, color: C.inkMid, marginTop: 1 }}>{flag.detail}</Text>
+      </View>
+    </View>
+  );
+}
+
+/** "Key risks at a glance" panel - the red/amber flags, or a reassurance line. */
+export function KeyRisks({ flags, style }: { flags: RiskFlag[]; style?: object }) {
+  return (
+    <View wrap={false} style={{ backgroundColor: C.white, borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 12, ...style }}>
+      <Text style={{ fontFamily: FONTS.body, fontSize: 8, fontWeight: 700, color: C.navy, letterSpacing: 1, marginBottom: 8 }}>
+        KEY RISKS AT A GLANCE
+      </Text>
+      {flags.length === 0 ? (
+        <RiskCallout flag={{ level: 'good', title: 'No material risks flagged', detail: 'No flood, crime, EPC or ownership red flags were identified from the pulled data.' }} style={{ marginBottom: 0 }} />
+      ) : (
+        flags.map((f, i) => <RiskCallout key={i} flag={f} style={i === flags.length - 1 ? { marginBottom: 0 } : undefined} />)
+      )}
+    </View>
   );
 }
