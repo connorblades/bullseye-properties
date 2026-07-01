@@ -142,11 +142,16 @@ export function SectionHeading({
   );
 }
 
-/** Soft card surface. `wrap={false}` keeps it whole across page breaks. */
-export function Card({ children, style }: { children: React.ReactNode; style?: object }) {
+/**
+ * Soft card surface. `wrap={false}` (default) keeps it whole across page breaks.
+ * Pass `wrap` for variable-length prose (AI narratives), which can exceed the
+ * space left on a page - an unbreakable card taller than the remaining page then
+ * crashes the layout engine, so long text must be allowed to flow across pages.
+ */
+export function Card({ children, style, wrap = false }: { children: React.ReactNode; style?: object; wrap?: boolean }) {
   return (
     <View
-      wrap={false}
+      wrap={wrap}
       style={{
         backgroundColor: C.white,
         borderWidth: 1,
@@ -167,5 +172,39 @@ export function Body({ children, style }: { children: React.ReactNode; style?: o
     <Text style={{ fontFamily: FONTS.body, fontSize: 10, lineHeight: 1.5, color: C.inkMid, ...style }}>
       {children}
     </Text>
+  );
+}
+
+/**
+ * Multi-paragraph prose for AI narratives. This @react-pdf build crashes on a
+ * literal '\n' inside a <Text> (an empty/broken run -> `unitsPerEm` of
+ * undefined), so newlines must never reach a Text node. Split on blank lines
+ * into paragraphs, collapse any remaining single newlines to spaces, drop empty
+ * paragraphs, and render each as its own <Text> with paragraph spacing.
+ */
+export function Prose({ text, style }: { text: string; style?: object }) {
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\s*\n\s*/g, ' ').trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return null;
+  return (
+    <>
+      {paragraphs.map((p, i) => (
+        <Text
+          key={i}
+          style={{
+            fontFamily: FONTS.body,
+            fontSize: 10,
+            lineHeight: 1.5,
+            color: C.inkMid,
+            marginBottom: i < paragraphs.length - 1 ? 6 : 0,
+            ...style,
+          }}
+        >
+          {p}
+        </Text>
+      ))}
+    </>
   );
 }
