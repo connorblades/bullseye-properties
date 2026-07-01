@@ -51,15 +51,17 @@ export async function publishReport(dealId: string, sections: PublishSection[]):
     const version = await nextReportVersion(tenantId, dealId);
     const versionId = `drv-${ulid()}`;
 
-    // Draft version row; the render step below fills pdf_storage_path + flips
-    // status to 'rendered' (or 'failed').
+    // Initial version row in the 'rendering' state; the render step below fills
+    // pdf_storage_path + flips status to 'rendered' (or 'failed'). Must be one of
+    // the values allowed by deal_report_versions_status_check (0001):
+    // 'rendering' | 'rendered' | 'failed' | 'archived'.
     await db.insert(dealReportVersions).values({
       id: versionId,
       tenantId,
       dealId,
       version,
       inputsSnapshot: (row.inputs as Record<string, unknown>) ?? {},
-      status: 'draft',
+      status: 'rendering',
       renderedBy: userId,
     });
 
