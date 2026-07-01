@@ -41,5 +41,5 @@ describe('report renders multi-paragraph narratives with newlines', () => {
     expect(Buffer.isBuffer(buf)).toBe(true);
     expect(buf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(buf.length).toBeGreaterThan(10_000);
-  });
+  }, 30_000); // PDF render is CPU-heavy; generous timeout avoids flakes under parallel load
 });

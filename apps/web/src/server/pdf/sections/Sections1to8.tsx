@@ -47,15 +47,50 @@ function NarrativeOrFallback({ text, fallback }: { text?: string; fallback: stri
 }
 
 /** Labelled stat tile for grids. */
-function Stat({ label, value, width }: { label: string; value: string; width: string | number }) {
+type Tone = 'good' | 'watch' | 'poor' | 'neutral';
+
+function toneStyle(tone: Tone): { value: string; bg: string; border: string } {
+  switch (tone) {
+    case 'good':
+      return { value: C.successDark, bg: C.successLight, border: C.success };
+    case 'watch':
+      return { value: '#b45309', bg: C.amberLight, border: C.amber };
+    case 'poor':
+      return { value: '#b91c1c', bg: C.redLight, border: C.red };
+    default:
+      return { value: C.ink, bg: C.bg, border: C.border };
+  }
+}
+
+/** Tone from a metric value against good/watch thresholds. 0/absent = neutral. */
+function metricTone(value: number, good: number, watch: number): Tone {
+  if (!Number.isFinite(value) || value <= 0) return 'neutral';
+  if (value >= good) return 'good';
+  if (value >= watch) return 'watch';
+  return 'poor';
+}
+
+function Stat({
+  label,
+  value,
+  width,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  width: string | number;
+  tone?: Tone;
+}) {
+  const t = toneStyle(tone);
   return (
     <View
       style={{
         width,
-        backgroundColor: C.bg,
+        backgroundColor: t.bg,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: C.border,
+        borderColor: t.border,
+        borderLeftWidth: tone === 'neutral' ? 1 : 3,
         padding: 8,
         marginBottom: 8,
       }}
@@ -63,7 +98,7 @@ function Stat({ label, value, width }: { label: string; value: string; width: st
       <Text style={{ fontFamily: FONTS.body, fontSize: 7, fontWeight: 700, color: C.inkMuted, letterSpacing: 0.5 }}>
         {label.toUpperCase()}
       </Text>
-      <Text style={{ fontFamily: FONTS.body, fontSize: 12, fontWeight: 700, color: C.ink, marginTop: 3 }}>
+      <Text style={{ fontFamily: FONTS.body, fontSize: 12, fontWeight: 700, color: t.value, marginTop: 3 }}>
         {value || '—'}
       </Text>
     </View>
@@ -183,8 +218,8 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             value={purchasePrice !== null ? fmtGBP(purchasePrice) : deal.financials.purchasePrice}
             width="32%"
           />
-          <Stat label="Gross yield" value={fmtPct(fin.grossYield)} width="32%" />
-          <Stat label="Net yield" value={fmtPct(fin.netYield)} width="32%" />
+          <Stat label="Gross yield" value={fmtPct(fin.grossYield)} width="32%" tone={metricTone(fin.grossYield, 8, 6)} />
+          <Stat label="Net yield" value={fmtPct(fin.netYield)} width="32%" tone={metricTone(fin.netYield, 6, 4)} />
           <Stat label="Annual rent" value={fmtGBP(fin.annualRent)} width="32%" />
         </View>
       </Card>

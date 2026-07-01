@@ -130,6 +130,7 @@ export function SectionHeading({
 }) {
   return (
     <View break={breakPage} style={{ marginBottom: 10 }}>
+      <View style={{ width: 24, height: 3, backgroundColor: C.navy, borderRadius: 2, marginBottom: 5 }} />
       <Text style={{ fontFamily: FONTS.body, fontSize: 8, fontWeight: 700, color: C.navy, letterSpacing: 1 }}>
         {`SECTION ${index}`}
       </Text>
