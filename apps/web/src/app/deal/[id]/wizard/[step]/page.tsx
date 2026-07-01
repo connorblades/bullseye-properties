@@ -15,6 +15,8 @@ import {
 import { Receipt, ExternalLink, Link2 } from 'lucide-react';
 import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { ShareLinkManager } from '@/components/share-link-manager';
+import { InspectionWalkthrough } from '@/components/inspection-walkthrough';
+import type { InspectionState } from '@/lib/inspection';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
 import { pullPublicData } from '@/server/actions/public-data';
@@ -546,11 +548,14 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
     });
   };
 
-  const phases: { key: 'pre' | 'on' | 'post'; label: string; sub: string }[] = [
+  const phases: { key: 'pre' | 'on' | 'inspect' | 'post'; label: string; sub: string }[] = [
     { key: 'pre', label: 'Before', sub: 'Prospect share + prep' },
     { key: 'on', label: 'During', sub: 'Photo checklist' },
+    { key: 'inspect', label: 'Inspection', sub: 'Guided walkthrough' },
     { key: 'post', label: 'After', sub: 'Assessment + sign-off' },
   ];
+
+  const endOrSemi = /end|semi/i.test(deal.property?.type ?? '');
 
   return (
     <div className="space-y-4">
@@ -664,6 +669,15 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
             <Plus size={16} /> Log this viewing to history
           </button>
         </>
+      )}
+
+      {/* INSPECTION - guided walkthrough (M6) */}
+      {phase === 'inspect' && (
+        <InspectionWalkthrough
+          state={v.inspection}
+          onChange={(next: InspectionState) => update({ viewing: { ...v, inspection: next } })}
+          endOrSemi={endOrSemi}
+        />
       )}
 
       {/* AFTER - assessment + human sign-off */}
