@@ -195,6 +195,9 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
   // --- Section 1 derived values ---
   const askingPrice = parseMoney(deal.property.askingPrice);
   const purchasePrice = parseMoney(deal.financials.purchasePrice);
+  const floorAreaSqft = Number(String(deal.property.floorArea ?? '').replace(/[^0-9.]/g, ''));
+  const psfBasis = purchasePrice ?? askingPrice;
+  const pricePerSqft = psfBasis && floorAreaSqft > 0 ? psfBasis / floorAreaSqft : null;
   const headline =
     deal.offer.strategy?.trim() ||
     `A ${deal.property.bedrooms || ''}-bed ${deal.property.type || 'property'} in ${data.address}, assessed against your stated buying criteria.`;
@@ -221,6 +224,9 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
           <Stat label="Gross yield" value={fmtPct(fin.grossYield)} width="32%" tone={metricTone(fin.grossYield, 8, 6)} />
           <Stat label="Net yield" value={fmtPct(fin.netYield)} width="32%" tone={metricTone(fin.netYield, 6, 4)} />
           <Stat label="Annual rent" value={fmtGBP(fin.annualRent)} width="32%" />
+          {pricePerSqft !== null ? (
+            <Stat label="Price per sqft" value={`${fmtGBP(pricePerSqft)}/sqft`} width="32%" />
+          ) : null}
         </View>
       </Card>
 
@@ -487,6 +493,16 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             <Stat label="Main heating" value={pub.epc.mainHeating || '—'} width="49%" />
             <Stat label="Property type" value={pub.epc.propertyType || '—'} width="49%" />
           </View>
+          {pub.epc.potentialScore > pub.epc.currentScore ? (
+            <View style={{ marginTop: 2, backgroundColor: C.successLight, borderRadius: 4, padding: 7 }}>
+              <Text style={{ fontFamily: FONTS.body, fontSize: 8.5, color: C.successDark, fontWeight: 700 }}>
+                {`Uplift potential: ${pub.epc.currentRating} (${pub.epc.currentScore}) to ${pub.epc.potentialRating} (${pub.epc.potentialScore}), +${pub.epc.potentialScore - pub.epc.currentScore} points`}
+              </Text>
+              <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: C.inkMid, marginTop: 1 }}>
+                Reaching the EPC C standard is a common lettings and grant threshold. Budget the recommended works into the refurbishment.
+              </Text>
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -764,6 +780,36 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             {pub.demographics.adminCounty ? <Stat label="County" value={pub.demographics.adminCounty} width="32%" /> : null}
             {pub.demographics.region ? <Stat label="Region" value={pub.demographics.region} width="32%" /> : null}
             {pub.demographics.lsoa ? <Stat label="LSOA" value={pub.demographics.lsoa} width="32%" /> : null}
+          </View>
+        </Card>
+      ) : null}
+
+      {/* Title & connectivity (Report v2: more characteristics) */}
+      {(pub?.landOwnership?.titles?.length ?? 0) > 0 || pub?.broadband ? (
+        <Card>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 8 }}>
+            Title and connectivity
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            {pub?.landOwnership?.titles?.[0]?.proprietors?.[0]?.name ? (
+              <Stat
+                label={pub.landOwnership.titles.some((t) => t.dataset === 'ocod') ? 'Registered proprietor (overseas)' : 'Registered proprietor'}
+                value={pub.landOwnership.titles[0].proprietors[0].name}
+                width="49%"
+              />
+            ) : null}
+            {pub?.landOwnership?.titles?.[0]?.tenure ? (
+              <Stat label="Tenure" value={pub.landOwnership.titles[0].tenure!} width="49%" />
+            ) : null}
+            {pub?.broadband?.maxDownloadMbps ? (
+              <Stat label="Max broadband" value={`${pub.broadband.maxDownloadMbps} Mbps`} width="32%" />
+            ) : null}
+            {pub?.broadband?.fullFibrePct != null ? (
+              <Stat label="Full-fibre availability" value={`${pub.broadband.fullFibrePct}%`} width="32%" tone={Number(pub.broadband.fullFibrePct) >= 50 ? 'good' : 'neutral'} />
+            ) : null}
+            {pub?.broadband?.superfastPct != null ? (
+              <Stat label="Superfast availability" value={`${pub.broadband.superfastPct}%`} width="32%" />
+            ) : null}
           </View>
         </Card>
       ) : null}
