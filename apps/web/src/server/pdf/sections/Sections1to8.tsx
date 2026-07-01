@@ -19,9 +19,12 @@ const CONTENT_W = 515;
 /** Split a narrative into paragraphs on blank lines; trim each. */
 function paragraphs(text: string | undefined): string[] {
   if (!text) return [];
+  // Split on blank lines into paragraphs, then collapse ANY remaining newline
+  // (with surrounding whitespace) to a space - a literal '\n' inside a <Text>
+  // crashes this @react-pdf build (undefined-font / unitsPerEm).
   return text
     .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s+\n/g, ' ').trim())
+    .map((p) => p.replace(/\s*\n\s*/g, ' ').trim())
     .filter(Boolean);
 }
 
@@ -187,7 +190,7 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
 
       {/* ===================== SECTION 2: WHY THIS PROPERTY FITS ===================== */}
       <SectionHeading index={2} title="Why this property fits" breakPage />
-      <Card>
+      <Card wrap>
         <NarrativeOrFallback
           text={narratives['why-this-fits']}
           fallback={`This ${deal.property.type || 'property'} was selected against your criteria${
@@ -200,7 +203,7 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
 
       {/* ===================== SECTION 3: LOCATION ===================== */}
       <SectionHeading index={3} title="Location" breakPage />
-      <Card style={{ marginBottom: 10 }}>
+      <Card wrap style={{ marginBottom: 10 }}>
         <NarrativeOrFallback
           text={narratives['location']}
           fallback={`${data.address} sits within ${

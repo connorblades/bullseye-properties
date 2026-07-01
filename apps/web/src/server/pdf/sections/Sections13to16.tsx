@@ -2,7 +2,7 @@ import 'server-only';
 import React from 'react';
 import { View, Text, Image, Svg, Path, Circle } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
-import { SectionHeading, Card, Body } from '../components';
+import { SectionHeading, Card, Body, Prose } from '../components';
 import type { ReportData } from '../report-data';
 import { parseMoney } from '@/lib/deal-calcs';
 
@@ -342,11 +342,11 @@ function OfferRecommendation({ data }: { data: ReportData }) {
         ) : null}
       </Card>
 
-      <Card style={{ marginBottom: 10 }}>
+      <Card wrap style={{ marginBottom: 10 }}>
         <Text style={{ fontFamily: FONTS.body, fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 6 }}>
           Rationale
         </Text>
-        <Body>{rationale && rationale.trim() ? rationale : fallbackRationale}</Body>
+        <Prose text={rationale && rationale.trim() ? rationale : fallbackRationale} />
       </Card>
 
       <Card style={{ backgroundColor: C.bg, borderColor: C.border }}>
