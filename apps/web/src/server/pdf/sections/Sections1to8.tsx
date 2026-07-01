@@ -2,7 +2,7 @@ import 'server-only';
 import React from 'react';
 import { View, Text, Image, Svg, Rect, Line } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
-import { SectionHeading, Card, Body, KeyRisks, RiskCallout } from '../components';
+import { SectionHeading, Card, Body, KeyRisks, RiskCallout, Prose } from '../components';
 import type { ReportData } from '../report-data';
 import { parseMoney, parseSoldMonth, hpiAdjustValue } from '@/lib/deal-calcs';
 import { keyRiskFlags, deriveRiskFlags } from '@/lib/risk-flags';
@@ -378,6 +378,11 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
 
       {/* ===================== SECTION 5: CONDITION ASSESSMENT ===================== */}
       <SectionHeading index={5} title="Condition assessment" breakPage />
+      {narratives['condition'] && narratives['condition'].trim() ? (
+        <Card wrap style={{ marginBottom: 10 }}>
+          <Prose text={narratives['condition']} />
+        </Card>
+      ) : null}
       <Card style={{ marginBottom: 10 }}>
         {(
           [
