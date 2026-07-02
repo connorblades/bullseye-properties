@@ -455,7 +455,7 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, fontWeight: 700, color: C.inkMuted, marginBottom: 3 }}>
               VIEWING NOTES
             </Text>
-            <Body style={{ fontSize: 9 }}>{deal.viewing.notes}</Body>
+            <Prose text={deal.viewing.notes} style={{ fontSize: 9 }} />
           </View>
         ) : null}
         {deal.viewing.assessment ? (
@@ -463,7 +463,7 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, fontWeight: 700, color: C.inkMuted, marginBottom: 3 }}>
               POST-VIEWING ASSESSMENT
             </Text>
-            <Body style={{ fontSize: 9 }}>{deal.viewing.assessment}</Body>
+            <Prose text={deal.viewing.assessment} style={{ fontSize: 9 }} />
           </View>
         ) : null}
         {deal.viewing.summary ? (
@@ -471,7 +471,7 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, fontWeight: 700, color: C.inkMuted, marginBottom: 3 }}>
               FURTHER COMMENTS
             </Text>
-            <Body style={{ fontSize: 9 }}>{deal.viewing.summary}</Body>
+            <Prose text={deal.viewing.summary} style={{ fontSize: 9 }} />
           </View>
         ) : null}
       </Card>

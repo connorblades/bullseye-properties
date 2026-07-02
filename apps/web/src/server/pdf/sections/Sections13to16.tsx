@@ -499,7 +499,7 @@ function AccreditedPartner({ data }: { data: ReportData }) {
             <Text style={{ fontFamily: FONTS.body, fontSize: 7, fontWeight: 700, color: C.inkMuted, letterSpacing: 0.5, marginBottom: 3 }}>
               ABOUT
             </Text>
-            <Body style={{ fontSize: 9.5 }}>{p.shortBio}</Body>
+            <Prose text={p.shortBio} style={{ fontSize: 9.5 }} />
           </View>
         ) : null}
       </Card>
