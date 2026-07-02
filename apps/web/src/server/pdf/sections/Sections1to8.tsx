@@ -17,33 +17,14 @@ const CONTENT_W = 515;
 
 // ── small shared helpers ────────────────────────────────────────────────────
 
-/** Split a narrative into paragraphs on blank lines; trim each. */
-function paragraphs(text: string | undefined): string[] {
-  if (!text) return [];
-  // Split on blank lines into paragraphs, then collapse ANY remaining newline
-  // (with surrounding whitespace) to a space - a literal '\n' inside a <Text>
-  // crashes this @react-pdf build (undefined-font / unitsPerEm).
-  return text
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s*\n\s*/g, ' ').trim())
-    .filter(Boolean);
-}
-
-/** Render a narrative as Body paragraphs, or a factual fallback if missing. */
+/**
+ * Render a narrative (or a factual fallback if missing) via the markdown-aware,
+ * newline-safe Prose component - so AI markdown (**bold**, bullet lists) renders
+ * cleanly and a literal '\n' never reaches a <Text>.
+ */
 function NarrativeOrFallback({ text, fallback }: { text?: string; fallback: string }) {
-  const ps = paragraphs(text);
-  if (ps.length === 0) {
-    return <Body style={{ color: C.inkMuted }}>{fallback}</Body>;
-  }
-  return (
-    <>
-      {ps.map((p, i) => (
-        <Body key={i} style={{ marginBottom: i === ps.length - 1 ? 0 : 8 }}>
-          {p}
-        </Body>
-      ))}
-    </>
-  );
+  const t = text && text.trim() ? text : fallback;
+  return <Prose text={t} style={text && text.trim() ? undefined : { color: C.inkMuted }} />;
 }
 
 /** Labelled stat tile for grids. */

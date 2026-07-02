@@ -177,38 +177,64 @@ export function Body({ children, style }: { children: React.ReactNode; style?: o
   );
 }
 
+/** Strip the light markdown Claude emits (bold/italic/code/heading markers). */
+export function stripInlineMarkdown(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '$1') // **bold** -> bold
+    .replace(/__(.+?)__/g, '$1') // __bold__ -> bold
+    .replace(/`([^`]+)`/g, '$1') // `code` -> code
+    .replace(/^\s{0,3}#{1,6}\s+/, '') // leading heading marker
+    .replace(/^\s{0,3}>\s+/, '') // leading blockquote marker
+    .replace(/\*\*/g, '') // any stray bold markers
+    .replace(/`/g, '')
+    .trim();
+}
+
 /**
- * Multi-paragraph prose for AI narratives. This @react-pdf build crashes on a
- * literal '\n' inside a <Text> (an empty/broken run -> `unitsPerEm` of
- * undefined), so newlines must never reach a Text node. Split on blank lines
- * into paragraphs, collapse any remaining single newlines to spaces, drop empty
- * paragraphs, and render each as its own <Text> with paragraph spacing.
+ * Multi-paragraph prose for AI narratives, markdown-aware. This @react-pdf build
+ * crashes on a literal '\n' inside a <Text> (`unitsPerEm` of undefined), so a
+ * newline must never reach a Text node: we render line-by-line. Consecutive
+ * plain lines join into a paragraph <Text>; lines starting with -, *, +, • are
+ * rendered as real bullet rows; blank lines break paragraphs. Inline markdown
+ * (**bold**, `code`, headings) is stripped so it never prints literally.
  */
 export function Prose({ text, style }: { text: string; style?: object }) {
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((p) => p.replace(/\s*\n\s*/g, ' ').trim())
-    .filter(Boolean);
-  if (paragraphs.length === 0) return null;
-  return (
-    <>
-      {paragraphs.map((p, i) => (
-        <Text
-          key={i}
-          style={{
-            fontFamily: FONTS.body,
-            fontSize: 10,
-            lineHeight: 1.5,
-            color: C.inkMid,
-            marginBottom: i < paragraphs.length - 1 ? 6 : 0,
-            ...style,
-          }}
-        >
-          {p}
-        </Text>
-      ))}
-    </>
-  );
+  const base = { fontFamily: FONTS.body, fontSize: 10, lineHeight: 1.5, color: C.inkMid, ...style };
+  const nodes: React.ReactNode[] = [];
+  let para: string[] = [];
+  let key = 0;
+  const flush = () => {
+    if (para.length) {
+      const t = stripInlineMarkdown(para.join(' '));
+      if (t) nodes.push(<Text key={key++} style={{ ...base, marginBottom: 6 }}>{t}</Text>);
+      para = [];
+    }
+  };
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) {
+      flush();
+      continue;
+    }
+    const bullet = line.match(/^[-*+•]\s+(.*)$/);
+    if (bullet) {
+      flush();
+      const item = stripInlineMarkdown(bullet[1]);
+      if (item) {
+        nodes.push(
+          <View key={key++} style={{ flexDirection: 'row', marginBottom: 3 }}>
+            <Text style={{ ...base, marginRight: 5 }}>&bull;</Text>
+            <Text style={{ ...base, flex: 1 }}>{item}</Text>
+          </View>,
+        );
+      }
+    } else {
+      para.push(line);
+    }
+  }
+  flush();
+  if (nodes.length === 0) return null;
+  return <>{nodes}</>;
 }
 
 // ─── Risk flags (Report v2) ─────────────────────────────────────────────────
