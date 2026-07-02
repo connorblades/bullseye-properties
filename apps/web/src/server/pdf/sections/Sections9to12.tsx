@@ -2,7 +2,7 @@ import 'server-only';
 import React from 'react';
 import { View, Text, Image, Svg, Path, Rect, Circle, Line } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
-import { SectionHeading, Card, Body } from '../components';
+import { SectionHeading, Card, Body, Prose } from '../components';
 import type { ReportData } from '../report-data';
 
 /**
@@ -92,7 +92,7 @@ function AuctionSection({ data }: { data: ReportData }) {
             <Text style={{ fontFamily: FONTS.body, fontSize: 8.5, fontWeight: 700, color: C.inkMuted, letterSpacing: 0.6 }}>
               SPECIAL CONDITIONS OF SALE
             </Text>
-            <Body style={{ marginTop: 3, fontSize: 9.5 }}>{a.specialConditions}</Body>
+            <Prose text={a.specialConditions} style={{ marginTop: 3, fontSize: 9.5 }} />
           </View>
         ) : null}
 
@@ -101,7 +101,7 @@ function AuctionSection({ data }: { data: ReportData }) {
             <Text style={{ fontFamily: FONTS.body, fontSize: 8.5, fontWeight: 700, color: C.inkMuted, letterSpacing: 0.6 }}>
               RESTRICTIVE COVENANTS
             </Text>
-            <Body style={{ marginTop: 3, fontSize: 9.5 }}>{a.restrictiveCovenants}</Body>
+            <Prose text={a.restrictiveCovenants} style={{ marginTop: 3, fontSize: 9.5 }} />
           </View>
         ) : null}
 
@@ -247,9 +247,7 @@ function DriversSection({ data }: { data: ReportData }) {
                   {d.title || 'Growth driver'}
                 </Text>
                 {d.justification ? (
-                  <Text style={{ fontFamily: FONTS.body, fontSize: 9, lineHeight: 1.45, color: C.inkMid, marginTop: 4 }}>
-                    {d.justification}
-                  </Text>
+                  <Prose text={d.justification} style={{ fontSize: 9, marginTop: 4 }} />
                 ) : null}
               </View>
             </Card>
