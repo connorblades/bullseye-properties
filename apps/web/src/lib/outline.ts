@@ -1,7 +1,8 @@
 import type { Deal } from './deal-store';
 import { computeFinancials, computeGrowthProjection, parseMoney } from './deal-calcs';
 import { scoreLeadFit, parseYieldTarget } from './lead-score';
-import { computeGdv, MIN_COMPS } from './comps';
+import { computeGdv, MIN_COMPS, roundTo } from './comps';
+import { computeRefurb } from './refurb';
 
 /**
  * Outline deal pack (M5) - the light, pre-viewing teaser shared with a prospect
@@ -103,6 +104,38 @@ export function computeIndicativeOffer(deal: Deal): IndicativeOffer {
   const suggestedOffer = anchors.length > 0 ? Math.min(...anchors) : null;
 
   return { marketValue, marketValueBasis, targetYieldPct, yieldMaxPrice, suggestedOffer };
+}
+
+/**
+ * The post-viewing offer (M6-T5): the pre-viewing indicative opening offer,
+ * firmed DOWN by the refurb cost established at the viewing (with contingency),
+ * rounded to the nearest £5,000. This is where the "subject to viewing"
+ * indicative number in the Outline pack becomes a concrete recommended offer.
+ */
+export type PostViewingOffer = {
+  indicativeOffer: number | null;  // pre-viewing suggested opening offer
+  refurbTotal: number;             // refurb incl. contingency
+  fromInspection: boolean;         // refurb came from a captured on-site inspection
+  suggestedOffer: number | null;   // max(0, indicative - refurb), rounded to £5k
+  basis: string;
+};
+
+export function computePostViewingOffer(deal: Deal): PostViewingOffer {
+  const indicative = computeIndicativeOffer(deal);
+  const refurb = computeRefurb(deal);
+  const indicativeOffer = indicative.suggestedOffer;
+  const refurbTotal = Math.round(refurb.total);
+  const fromInspection = refurb.source === 'inspection';
+
+  const suggestedOffer =
+    indicativeOffer != null ? roundTo(Math.max(0, indicativeOffer - refurbTotal), 5000) : null;
+
+  const basis =
+    indicativeOffer != null
+      ? `Indicative ${gbp(indicativeOffer)} less ${gbp(refurbTotal)} refurb${fromInspection ? ' (from the inspection)' : ''}, rounded to the nearest £5,000`
+      : 'Add comparables or a guide price to derive an offer';
+
+  return { indicativeOffer, refurbTotal, fromInspection, suggestedOffer, basis };
 }
 
 export function buildOutline(deal: Deal): OutlineData {

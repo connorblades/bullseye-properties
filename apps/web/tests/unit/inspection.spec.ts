@@ -21,6 +21,8 @@ import {
   buildInspectionLines,
   inspectionRefurb,
   inspectionProgress,
+  inspectionFindings,
+  inspectionPhotos,
   type InspectionState,
 } from '@/lib/inspection';
 
@@ -239,5 +241,29 @@ describe('captured inspection aggregation', () => {
     const p = inspectionProgress(state);
     expect(p.done).toBe(4); // windows, consumer-unit, internal-damp, ridge-tiles all rated
     expect(p.total).toBe(INSPECTION_STEPS.length);
+  });
+
+  it('inspectionFindings returns captured steps in walkthrough order', () => {
+    const f = inspectionFindings(state);
+    expect(f.map((x) => x.key)).toEqual(['ridge-tiles', 'windows', 'consumer-unit', 'internal-damp']);
+    expect(f.find((x) => x.key === 'windows')?.rating).toBe(4);
+  });
+
+  it('inspectionFindings flags a walk-away signal', () => {
+    const s: InspectionState = { rooms: [], steps: { 'spray-foam': { flagged: true } } };
+    const f = inspectionFindings(s);
+    expect(f[0]).toMatchObject({ key: 'spray-foam', flagged: true, walkAway: true });
+  });
+
+  it('inspectionPhotos collects step photos in order', () => {
+    const s: InspectionState = {
+      rooms: [],
+      steps: {
+        'consumer-unit': { photos: ['data:img/b'] },
+        'ridge-tiles': { photos: ['data:img/a'] },
+      },
+    };
+    // ridge-tiles precedes consumer-unit in INSPECTION_STEPS order.
+    expect(inspectionPhotos(s)).toEqual(['data:img/a', 'data:img/b']);
   });
 });

@@ -5,6 +5,7 @@
  */
 
 import type { Deal, HpiInfo } from './deal-store';
+import { computeRefurb } from './refurb';
 
 // ── HPI comp adjustment ──────────────────────────────────────────────────────
 
@@ -53,12 +54,11 @@ export function computeFinancials(deal: Deal): ComputedFinancials {
   const annualCosts = parseFloat(deal.financials.annualCosts.replace(/[^0-9.]/g, '')) || 0;
   const annualRent = monthlyRent * 12;
 
-  const refurbItemsTotal = deal.refurb.items.reduce((sum, i) => {
-    const v = parseFloat(i.cost.replace(/[^0-9.]/g, '')) || 0;
-    return sum + v;
-  }, 0);
-  const contingencyPct = parseFloat(deal.refurb.contingencyPct) || 0;
-  const refurbWithContingency = refurbItemsTotal * (1 + contingencyPct / 100);
+  // Refurb is sourced from the captured inspection when present, else the manual
+  // itemised refurb (see lib/refurb.ts). One number drives report + projection.
+  const refurb = computeRefurb(deal);
+  const refurbItemsTotal = refurb.subtotal;
+  const refurbWithContingency = refurb.total;
 
   const sourcingFee = 3000;
   const totalAcquisition = purchasePrice + refurbWithContingency + sourcingFee;

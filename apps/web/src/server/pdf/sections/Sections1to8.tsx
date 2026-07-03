@@ -6,6 +6,7 @@ import { SectionHeading, Card, Body, KeyRisks, RiskCallout, Prose } from '../com
 import type { ReportData } from '../report-data';
 import { parseMoney, parseSoldMonth, hpiAdjustValue } from '@/lib/deal-calcs';
 import { keyRiskFlags, deriveRiskFlags } from '@/lib/risk-flags';
+import { inspectionPhotos, inspectionFindings, ZONE_ORDER } from '@/lib/inspection';
 
 /**
  * PDF Sections 1-8 (M3-T7).
@@ -172,6 +173,12 @@ function BarChart({ values, w = CONTENT_W - 24, h = 90 }: { values: number[]; w?
 export function SectionsOneToEight({ data }: { data: ReportData }) {
   const { deal, fin, narratives } = data;
   const pub = deal.publicData;
+
+  // --- Section 4/5: viewing photos + guided-inspection capture (M6-T5) ---
+  const inspection = deal.viewing.inspection;
+  const inspectionPics = inspection ? inspectionPhotos(inspection) : [];
+  const photos = Array.from(new Set([...deal.viewing.photos.filter(Boolean), ...inspectionPics]));
+  const findings = inspection ? inspectionFindings(inspection) : [];
 
   // --- Section 1 derived values ---
   const askingPrice = parseMoney(deal.property.askingPrice);
@@ -354,10 +361,10 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
 
       {/* ===================== SECTION 4: PHOTOS AND WALKTHROUGH ===================== */}
       <SectionHeading index={4} title="Photos and walkthrough" breakPage />
-      {deal.viewing.photos.length > 0 ? (
+      {photos.length > 0 ? (
         <Card style={{ marginBottom: 10 }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
-            {deal.viewing.photos.map((src, i) =>
+            {photos.map((src, i) =>
               src ? (
                 <Image
                   key={i}
@@ -456,6 +463,52 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
           </View>
         ) : null}
       </Card>
+
+      {/* Guided inspection - rated walkthrough (M6-T5) */}
+      {findings.length > 0 ? (
+        <Card style={{ marginBottom: 10 }}>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 6 }}>
+            Guided inspection
+          </Text>
+          {ZONE_ORDER.map((z) => {
+            const zoneFindings = findings.filter((f) => f.zone === z.zone);
+            if (zoneFindings.length === 0) return null;
+            return (
+              <View key={z.zone} style={{ marginBottom: 6 }}>
+                <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, fontWeight: 700, color: C.inkMuted, letterSpacing: 0.6, marginBottom: 2 }}>
+                  {z.title.toUpperCase()}
+                </Text>
+                {zoneFindings.map((f) => (
+                  <View
+                    key={f.key}
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 3, borderBottomWidth: 0.5, borderBottomColor: C.border }}
+                  >
+                    <Text style={{ flex: 1, fontFamily: FONTS.body, fontSize: 9, color: C.ink }}>
+                      {f.label}
+                      {f.walkAway ? '  (flag)' : ''}
+                    </Text>
+                    {f.reading ? (
+                      <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: C.inkMuted, marginRight: 8 }}>{f.reading}</Text>
+                    ) : null}
+                    {f.rating !== undefined ? (
+                      <Text style={{ width: 44, textAlign: 'right', fontFamily: FONTS.body, fontSize: 9, fontWeight: 700, color: f.rating >= 7 ? C.success : f.rating >= 4 ? C.ink : C.red }}>
+                        {f.rating}/10
+                      </Text>
+                    ) : (
+                      <Text style={{ width: 44, textAlign: 'right', fontFamily: FONTS.body, fontSize: 8, color: C.inkMuted }}>
+                        {f.flagged ? 'noted' : ''}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+          <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: C.inkMuted, marginTop: 4 }}>
+            Condition scored 1 (poor) to 10 (excellent) at the on-site inspection.
+          </Text>
+        </Card>
+      ) : null}
 
       {/* EPC block */}
       {pub?.epc ? (
