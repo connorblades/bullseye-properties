@@ -4,6 +4,7 @@ import { View, Text, Image, Svg, Path, Rect, Circle, Line } from '@react-pdf/ren
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
 import { SectionHeading, Card, Body, Prose } from '../components';
 import type { ReportData } from '../report-data';
+import { computeRefurb } from '@/lib/refurb';
 
 /**
  * PDF Sections 9-12 (M3-T8).
@@ -119,14 +120,15 @@ function AuctionSection({ data }: { data: ReportData }) {
 
 function RefurbSection({ data }: { data: ReportData }) {
   const r = data.deal.refurb;
-  const contingencyPct = num(r.contingencyPct);
   const weeks = (r.weeks ?? '').trim();
+  const refurb = computeRefurb(data.deal);
+  const measured = refurb.source === 'inspection';
   return (
     <>
       <SectionHeading
         index={10}
         title="Refurbishment Plan"
-        subtitle="Itemised works, contingency and total budget"
+        subtitle={measured ? 'Measured on-site take-off, contingency and total budget' : 'Itemised works, contingency and total budget'}
         breakPage
       />
       <Card>
@@ -148,23 +150,28 @@ function RefurbSection({ data }: { data: ReportData }) {
           </Text>
         </View>
 
-        {r.items.map((item, i) => (
+        {refurb.lines.map((line, i) => (
           <View
-            key={item.id}
+            key={`${line.label}-${i}`}
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
               paddingVertical: 5,
-              borderBottomWidth: i === r.items.length - 1 ? 0 : 1,
+              borderBottomWidth: i === refurb.lines.length - 1 ? 0 : 1,
               borderBottomColor: C.border,
             }}
           >
-            <Text style={{ flex: 1, fontFamily: FONTS.body, fontSize: 10, color: C.ink }}>
-              {item.name || 'Refurbishment item'}
-            </Text>
-            <Text style={{ width: 90, textAlign: 'right', fontFamily: FONTS.body, fontSize: 10, color: C.ink }}>
-              {fmtGBP(num(item.cost))}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ flex: 1, fontFamily: FONTS.body, fontSize: 10, color: C.ink }}>
+                {line.label}
+              </Text>
+              <Text style={{ width: 90, textAlign: 'right', fontFamily: FONTS.body, fontSize: 10, color: C.ink }}>
+                {fmtGBP(line.total)}
+              </Text>
+            </View>
+            {line.basis ? (
+              <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: C.inkMuted, marginTop: 1 }}>
+                {line.basis}
+              </Text>
+            ) : null}
           </View>
         ))}
 
@@ -172,15 +179,15 @@ function RefurbSection({ data }: { data: ReportData }) {
         <View style={{ flexDirection: 'row', paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: C.border }}>
           <Text style={{ flex: 1, fontFamily: FONTS.body, fontSize: 9.5, color: C.inkMid }}>Works subtotal</Text>
           <Text style={{ width: 90, textAlign: 'right', fontFamily: FONTS.body, fontSize: 9.5, color: C.inkMid }}>
-            {fmtGBP(data.fin.refurbCost)}
+            {fmtGBP(refurb.subtotal)}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', paddingTop: 4 }}>
           <Text style={{ flex: 1, fontFamily: FONTS.body, fontSize: 9.5, color: C.inkMid }}>
-            {`Contingency (${fmtPct(contingencyPct, 0)})`}
+            {`Contingency (${refurb.contingencyLabel})`}
           </Text>
           <Text style={{ width: 90, textAlign: 'right', fontFamily: FONTS.body, fontSize: 9.5, color: C.inkMid }}>
-            {fmtGBP(data.fin.refurbWithContingency - data.fin.refurbCost)}
+            {fmtGBP(refurb.contingency)}
           </Text>
         </View>
 
@@ -200,9 +207,21 @@ function RefurbSection({ data }: { data: ReportData }) {
             Total refurbishment budget
           </Text>
           <Text style={{ fontFamily: FONTS.body, fontSize: 13, fontWeight: 700, color: C.white }}>
-            {fmtGBP(data.fin.refurbWithContingency)}
+            {fmtGBP(refurb.total)}
           </Text>
         </View>
+
+        {measured ? (
+          <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: C.inkMuted, marginTop: 8 }}>
+            Costs are a measured take-off from the on-site inspection: areas from captured room dimensions, materials at trade rates plus labour, with a project contingency on the subtotal.
+          </Text>
+        ) : null}
+
+        {refurb.epc && !refurb.epc.included ? (
+          <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: C.inkMuted, marginTop: 6 }}>
+            {`EPC works to reach band ${refurb.epc.works.targetBand} are estimated at ${fmtGBP(refurb.epc.cost)} on the certificate (not included above).`}
+          </Text>
+        ) : null}
 
         {weeks ? (
           <Text style={{ fontFamily: FONTS.body, fontSize: 9, color: C.inkMuted, marginTop: 8 }}>
@@ -503,7 +522,11 @@ function ProjectionSection({ data }: { data: ReportData }) {
 
 export function SectionsNineToTwelve({ data }: { data: ReportData }) {
   const showAuction = data.deal.auction.isAuction;
-  const showRefurb = data.deal.refurb.needed && data.deal.refurb.items.length > 0;
+  // Show the refurb plan when there is a captured inspection take-off OR the
+  // partner itemised a manual refurb.
+  const refurb = computeRefurb(data.deal);
+  const showRefurb =
+    refurb.lines.length > 0 || (data.deal.refurb.needed && data.deal.refurb.items.length > 0);
   return (
     <>
       {showAuction ? <AuctionSection data={data} /> : null}

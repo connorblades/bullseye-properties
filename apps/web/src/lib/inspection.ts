@@ -565,6 +565,58 @@ export function inspectionRefurb(
   return summariseRefurb(buildInspectionLines(state, steps, book));
 }
 
+/** Every captured step photo across the walkthrough (data URIs), in step order. */
+export function inspectionPhotos(
+  state: InspectionState,
+  steps: InspectionStep[] = INSPECTION_STEPS,
+): string[] {
+  const out: string[] = [];
+  for (const step of steps) {
+    for (const p of state.steps[step.key]?.photos ?? []) if (p) out.push(p);
+  }
+  return out;
+}
+
+/** A rated / read / flagged step, surfaced in the report condition section. */
+export interface InspectionFinding {
+  key: string;
+  label: string;
+  zone: InspectionZone;
+  rating?: number;
+  reading?: string;
+  notes?: string;
+  flagged?: boolean;
+  /** A flagged deal-killer signal (e.g. spray foam present). */
+  walkAway?: boolean;
+}
+
+/** Steps with anything captured (rating / reading / notes / flag), in order. */
+export function inspectionFindings(
+  state: InspectionState,
+  steps: InspectionStep[] = INSPECTION_STEPS,
+): InspectionFinding[] {
+  const out: InspectionFinding[] = [];
+  for (const step of steps) {
+    const c = state.steps[step.key];
+    if (!c) continue;
+    const reading = (c.reading ?? '').trim();
+    const notes = (c.notes ?? '').trim();
+    const has = c.rating !== undefined || reading || notes || c.flagged;
+    if (!has) continue;
+    out.push({
+      key: step.key,
+      label: step.label,
+      zone: step.zone,
+      rating: c.rating,
+      reading: reading || undefined,
+      notes: notes || undefined,
+      flagged: c.flagged || undefined,
+      walkAway: (c.flagged && step.walkAwaySignal) || undefined,
+    });
+  }
+  return out;
+}
+
 /** Walkthrough completeness: steps with a rating or a photo, out of the total. */
 export function inspectionProgress(
   state: InspectionState,

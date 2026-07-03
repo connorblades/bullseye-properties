@@ -35,6 +35,7 @@ import { fetchLandOwnership } from '@/server/public-data/land-ownership';
 import { fetchBroadband } from '@/server/public-data/broadband';
 import { fetchBoundary } from '@/server/public-data/boundaries';
 import { fetchEpc } from '@/server/public-data/epc';
+import { fetchEpcRecommendations } from '@/server/public-data/epc-recommendations';
 import { lookupCompany } from '@/server/public-data/companies';
 import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
 import type { VendorCompany } from '@/lib/deal-store';
@@ -94,7 +95,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc, epcRecommendations] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -111,6 +112,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchBroadband(geo.postcode),
       fetchBoundary(geo.lat, geo.lng),
       fetchEpc(geo.postcode, address),
+      fetchEpcRecommendations(geo.postcode, address),
     ]);
 
   const demographics: Demographics = {
@@ -178,6 +180,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(broadband ? { broadband } : {}),
     ...(boundary ? { boundary } : {}),
     ...(epc ? { epc } : {}),
+    ...(epcRecommendations ? { epcRecommendations } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,
   };

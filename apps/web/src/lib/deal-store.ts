@@ -22,6 +22,7 @@ import {
 } from '@/server/actions/deals';
 import { defaultViewingChecklist } from './viewing';
 import type { InspectionState } from './inspection';
+import type { GrantWorks } from './epc-grants';
 
 export type StageRating = 'Good' | 'OK' | 'Issue' | '';
 
@@ -341,6 +342,7 @@ export type PublicData = {
   broadband?: BroadbandInfo;
   boundary?: BoundaryInfo;
   rentTrend?: RentTrendInfo;
+  epcRecommendations?: GrantWorks;  // EPC works-to-C measures + indicative cost (M6-T2)
 };
 
 /**
@@ -473,6 +475,8 @@ export type Deal = {
     items: RefurbItem[];
     contingencyPct: string;
     weeks: string;
+    // M6-T5: fold the pulled EPC works-to-C cost into the refurb total.
+    includeEpcWorks?: boolean;
   };
 
   financials: {

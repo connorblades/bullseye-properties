@@ -56,6 +56,8 @@ import {
   snapshotViewing,
 } from '@/lib/viewing';
 import { computeGdv, estimateRent, MIN_COMPS } from '@/lib/comps';
+import { computePostViewingOffer } from '@/lib/outline';
+import { computeRefurb } from '@/lib/refurb';
 
 export default function WizardStepPage({ params }: { params: { id: string; step: string } }) {
   const router = useRouter();
@@ -673,11 +675,14 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
 
       {/* INSPECTION - guided walkthrough (M6) */}
       {phase === 'inspect' && (
-        <InspectionWalkthrough
-          state={v.inspection}
-          onChange={(next: InspectionState) => update({ viewing: { ...v, inspection: next } })}
-          endOrSemi={endOrSemi}
-        />
+        <div className="space-y-4">
+          <EpcWorksCard deal={deal} update={update} />
+          <InspectionWalkthrough
+            state={v.inspection}
+            onChange={(next: InspectionState) => update({ viewing: { ...v, inspection: next } })}
+            endOrSemi={endOrSemi}
+          />
+        </div>
       )}
 
       {/* AFTER - assessment + human sign-off */}
@@ -764,6 +769,39 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
           <button onClick={startNewViewing} className="text-xs text-ink-muted hover:text-navy font-semibold ml-3">Start a fresh viewing</button>
         </>
       )}
+    </div>
+  );
+}
+
+/** EPC works-to-C: the pulled measures + cost, with an opt-in to the refurb total. */
+function EpcWorksCard({ deal, update }: { deal: Deal; update: UpdateFn }) {
+  const gw = deal.publicData?.epcRecommendations;
+  if (!gw || gw.alreadyAtTarget || gw.measuresToTarget.length === 0) return null;
+  const cost = gw.cost.mid ?? gw.cost.high ?? gw.cost.low ?? 0;
+  const included = !!deal.refurb.includeEpcWorks;
+  const toggle = () => update({ refurb: { ...deal.refurb, includeEpcWorks: !included } });
+  return (
+    <div className="card p-5 bg-navy/[0.03] border-navy/20">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="text-sm font-black text-ink">EPC works to reach band {gw.targetBand}</div>
+        {cost > 0 && <div className="text-lg font-black text-navy">{fmtMoney(cost)}</div>}
+      </div>
+      <p className="text-xs text-ink-muted mb-2">Pulled from the EPC certificate ({gw.currentBand} now). Tick any already done in the walkthrough; fold the remainder into the refurb total below.</p>
+      <ul className="text-xs text-ink-mid space-y-1 mb-3">
+        {gw.measuresToTarget.map((m, i) => (
+          <li key={i} className="flex justify-between gap-3 border-b border-black/[0.05] py-1">
+            <span>{m.summary}</span>
+            {m.indicativeCostText && <span className="text-ink-muted whitespace-nowrap">{m.indicativeCostText}</span>}
+          </li>
+        ))}
+      </ul>
+      {!gw.reachesTarget && (
+        <p className="text-[11px] text-amber-700 mb-2">These measures do not fully reach band {gw.targetBand} on the certificate; treat the cost as a floor.</p>
+      )}
+      <label className="flex items-center gap-2 text-xs font-semibold text-ink-mid">
+        <input type="checkbox" checked={included} onChange={toggle} />
+        Include {fmtMoney(cost)} of EPC works in the refurb total
+      </label>
     </div>
   );
 }
@@ -931,8 +969,19 @@ function RefurbPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   const cPct = parseFloat(deal.refurb.contingencyPct) || 0;
   const withContingency = total * (1 + cPct / 100);
 
+  const refurb = computeRefurb(deal);
+  const fromInspection = refurb.source === 'inspection';
+
   return (
     <div className="space-y-4">
+      {fromInspection && (
+        <div className="card p-4 bg-navy/[0.03] border-navy/20">
+          <div className="text-xs font-bold text-navy uppercase tracking-wider mb-1">Using the inspection take-off</div>
+          <p className="text-xs text-ink-mid">
+            The report&rsquo;s refurb figure is coming from the guided inspection (Stage 8): <span className="font-bold text-ink">{fmtMoney(refurb.total)}</span> including a {refurb.contingencyLabel} contingency. These manual items are ignored while an inspection is captured.
+          </p>
+        </div>
+      )}
       <div className="card p-6">
         <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-4">Itemised refurbishment cost</div>
         <div className="space-y-2">
@@ -1116,8 +1165,24 @@ function ProjectionChart({ proj }: { proj: ReturnType<typeof computeGrowthProjec
 
 function OfferPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   const set = (k: keyof Deal['offer'], v: string) => update({ offer: { ...deal.offer, [k]: v } });
+  const pv = computePostViewingOffer(deal);
   return (
     <div className="space-y-4">
+      {pv.suggestedOffer != null && (
+        <div className="card p-4 bg-navy/[0.03] border-navy/20 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="text-xs font-bold text-navy uppercase tracking-wider">Post-viewing offer</div>
+            <div className="text-2xl font-black text-ink">{fmtMoney(pv.suggestedOffer)}</div>
+            <div className="text-[11px] text-ink-muted">{pv.basis}</div>
+          </div>
+          <button
+            onClick={() => set('recommended', String(pv.suggestedOffer))}
+            className="btn-secondary text-xs"
+          >
+            Use this offer
+          </button>
+        </div>
+      )}
       <div className="card p-8">
         <label className="text-xs font-bold text-ink-mid uppercase tracking-wider block mb-2">Recommended offer (£)</label>
         <input value={deal.offer.recommended} onChange={(e) => set('recommended', e.target.value)} placeholder="112500" className="w-full text-4xl font-black text-navy border border-black/[0.08] rounded-lg px-4 py-4 focus:outline-none focus:ring-2 focus:ring-navy/30" />

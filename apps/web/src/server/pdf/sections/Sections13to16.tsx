@@ -5,6 +5,7 @@ import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
 import { SectionHeading, Card, Body, Prose } from '../components';
 import type { ReportData } from '../report-data';
 import { parseMoney } from '@/lib/deal-calcs';
+import { computePostViewingOffer } from '@/lib/outline';
 
 /**
  * PDF Sections 13-16 (M3-T9): Financial analysis, Offer recommendation,
@@ -307,9 +308,15 @@ function FinancialAnalysis({ data }: { data: ReportData }) {
 
 function OfferRecommendation({ data }: { data: ReportData }) {
   const { deal, narratives } = data;
-  const recommended = parseMoney(deal.offer.recommended);
   const asking = parseMoney(deal.property.askingPrice);
   const rationale = narratives['offer-rationale'];
+
+  // Prefer the partner's explicit offer; otherwise fall back to the post-viewing
+  // offer (indicative less the refurb established at the viewing) - M6-T5.
+  const explicit = parseMoney(deal.offer.recommended);
+  const postViewing = computePostViewingOffer(deal);
+  const recommended = explicit ?? postViewing.suggestedOffer;
+  const derived = explicit == null && recommended != null;
 
   const fallbackRationale =
     asking && recommended
@@ -338,6 +345,11 @@ function OfferRecommendation({ data }: { data: ReportData }) {
             {`Asking price ${fmtGBP(asking)}${
               recommended && asking > 0 ? `  ·  ${fmtPct(((asking - recommended) / asking) * 100)} below asking` : ''
             }`}
+          </Text>
+        ) : null}
+        {derived ? (
+          <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: 'rgba(255,255,255,0.65)', marginTop: 3 }}>
+            {postViewing.basis}
           </Text>
         ) : null}
       </Card>
