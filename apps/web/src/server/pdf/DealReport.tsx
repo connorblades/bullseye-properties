@@ -37,7 +37,7 @@ function Cover({ data }: { data: ReportData }) {
   const { reference, address, preparedFor, generatedOn, partner } = data;
   const wordmark = assetPath('logo-white.png');
   return (
-    <Page size="A4" style={{ position: 'relative' }}>
+    <Page size="A4" wrap={false} style={{ position: 'relative' }}>
       {/* Full-bleed navy gradient background */}
       <View wrap={false} style={{ position: 'absolute', top: 0, left: 0, width: A4_W, height: A4_H }}>
         <Svg width={A4_W} height={A4_H}>
