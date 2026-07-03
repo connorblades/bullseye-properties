@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline · Bullseye Platform</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 20px; text-align: center; padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: #f7f8fa; background: linear-gradient(160deg, #1f5199 0%, #0d2a5e 55%, #0a1e47 100%);
+      }
+      img { width: 84px; height: 84px; }
+      h1 { font-size: 22px; font-weight: 800; margin: 0; }
+      p { font-size: 14px; opacity: 0.8; margin: 0; max-width: 340px; line-height: 1.5; }
+      button {
+        margin-top: 8px; border: 0; border-radius: 10px; padding: 11px 20px;
+        font-size: 14px; font-weight: 700; color: #0a1e47; background: #ffffff; cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="/icon-white.png" alt="Bullseye" />
+    <h1>You are offline</h1>
+    <p>The Bullseye Platform needs a connection to load your deals and reports. Reconnect and try again.</p>
+    <button onclick="location.reload()">Retry</button>
+  </body>
+</html>
