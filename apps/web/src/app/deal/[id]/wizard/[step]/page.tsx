@@ -17,6 +17,8 @@ import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { ShareLinkManager } from '@/components/share-link-manager';
 import { InspectionWalkthrough } from '@/components/inspection-walkthrough';
 import type { InspectionState } from '@/lib/inspection';
+import { ViewingBookingCard } from '@/components/viewing-booking';
+import { isEndOrSemi, type ViewingBooking } from '@/lib/booking';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
 import { pullPublicData } from '@/server/actions/public-data';
@@ -555,7 +557,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
     { key: 'post', label: 'After', sub: 'Assessment + sign-off' },
   ];
 
-  const endOrSemi = /end|semi/i.test(deal.property?.type ?? '');
+  const endOrSemi = isEndOrSemi(deal);
 
   return (
     <div className="space-y-4">
@@ -600,17 +602,24 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
 
       {/* BEFORE */}
       {phase === 'pre' && (
-        <div className="card p-6">
-          <div className="text-xs font-bold text-navy uppercase tracking-wider mb-1">Pre-viewing</div>
-          <p className="text-sm text-ink-mid mb-4">This is the light pack you share with a prospect to gauge interest, before a viewing is booked. Capture any prep notes and questions for the agent here.</p>
-          <textarea
-            value={v.prep ?? ''}
-            onChange={(e) => set('prep', e.target.value)}
-            rows={5}
-            placeholder="Questions to ask the agent, things to check, access details, reason for sale, chain position, what's included..."
-            className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
+        <>
+          <ViewingBookingCard
+            deal={deal}
+            booking={v.booking}
+            onChange={(next: ViewingBooking) => update({ viewing: { ...v, booking: next } })}
           />
-        </div>
+          <div className="card p-6">
+            <div className="text-xs font-bold text-navy uppercase tracking-wider mb-1">Prep notes</div>
+            <p className="text-sm text-ink-mid mb-4">Questions and things to check before you go. This is also where you capture the light pack you share with a prospect to gauge interest.</p>
+            <textarea
+              value={v.prep ?? ''}
+              onChange={(e) => set('prep', e.target.value)}
+              rows={5}
+              placeholder="Questions to ask the agent, things to check, access details, reason for sale, chain position, what's included..."
+              className="w-full border border-black/[0.08] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 resize-none"
+            />
+          </div>
+        </>
       )}
 
       {/* DURING - photo checklist */}

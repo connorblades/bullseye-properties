@@ -22,6 +22,7 @@ import {
 } from '@/server/actions/deals';
 import { defaultViewingChecklist } from './viewing';
 import type { InspectionState } from './inspection';
+import type { ViewingBooking } from './booking';
 
 export type StageRating = 'Good' | 'OK' | 'Issue' | '';
 
@@ -451,6 +452,8 @@ export type Deal = {
     signedOffAt?: string;        // ISO timestamp of sign-off
     // M6 guided inspection: rated walkthrough + measured rooms + refurb costs.
     inspection?: InspectionState;
+    // M6-T4 booking: the slot, agent contact + attached confirmation email.
+    booking?: ViewingBooking;
   };
 
   // Past viewings, newest last. The live `viewing` above is the working one;
