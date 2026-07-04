@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitForCandidate } from '@/server/actions/lead-review';
+import { fitForCandidate } from '@/lib/lead-intake';
 import type { ScrapedCandidate } from '@/lib/lead-intake';
 
 function candidate(overrides: Partial<ScrapedCandidate> = {}): ScrapedCandidate {

@@ -2,10 +2,10 @@ import { timingSafeEqual } from 'node:crypto';
 import { ulid } from 'ulid';
 import { db } from '@/server/db/client';
 import { leadCandidates } from '@/server/db/schema';
-import { fitForCandidate } from '@/server/actions/lead-review';
 import {
   normaliseCandidate,
   dedupeKey,
+  fitForCandidate,
   type ScrapedCandidate,
 } from '@/lib/lead-intake';
 

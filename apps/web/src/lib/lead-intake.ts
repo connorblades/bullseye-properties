@@ -13,6 +13,8 @@
  */
 
 import type { Deal } from './deal-store';
+import { emptyDeal } from './deal-store';
+import { scoreLeadFit } from './lead-score';
 
 /** Where a candidate came from, mapped onto Deal.source by mapSource(). */
 export type LeadChannel = 'portal' | 'auction' | 'open-data' | 'direct';
@@ -287,4 +289,17 @@ export function candidateToDealInput(raw: ScrapedCandidate): CandidateDealInput 
     source: mapSource(c),
     initialInputs,
   };
+}
+
+/**
+ * Build a draft Deal from a candidate and score its fit (0..100). Pure: no DB.
+ * Lives here (not in the 'use server' lead-review module) so it can be unit
+ * tested and reused by the ingest API route without a server-action boundary.
+ */
+export function fitForCandidate(raw: ScrapedCandidate): number {
+  const { address, initialInputs } = candidateToDealInput(raw);
+  // Seed the draft with the composed address too - scoreLeadFit's area check
+  // reads deal.address, which lives outside initialInputs.
+  const draft = emptyDeal(`lc-draft-${dedupeKey(raw)}`, { ...initialInputs, address });
+  return scoreLeadFit(draft).pct;
 }

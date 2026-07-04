@@ -22,12 +22,11 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { deals, leadCandidates } from '@/server/db/schema';
 import { requireTenant, createDeal } from '@/server/actions/deals';
-import { emptyDeal } from '@/lib/deal-store';
-import { scoreLeadFit } from '@/lib/lead-score';
 import {
   normaliseCandidate,
   candidateToDealInput,
   dedupeKey,
+  fitForCandidate,
   type ScrapedCandidate,
 } from '@/lib/lead-intake';
 
@@ -45,18 +44,6 @@ export type IngestOptions = {
 /** Today's date as YYYY-MM-DD (the `captured_for` day for a batch). */
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-/**
- * Build a draft Deal from a candidate and score its fit. Pure: no DB. Exported
- * for unit testing the mapping without hitting the database.
- */
-export function fitForCandidate(raw: ScrapedCandidate): number {
-  const { address, initialInputs } = candidateToDealInput(raw);
-  // Seed the draft with the composed address too - scoreLeadFit's area check
-  // reads deal.address, which lives outside initialInputs.
-  const draft = emptyDeal(`lc-draft-${dedupeKey(raw)}`, { ...initialInputs, address });
-  return scoreLeadFit(draft).pct;
 }
 
 /**
