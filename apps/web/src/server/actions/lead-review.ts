@@ -53,12 +53,31 @@ function todayIso(): string {
  * the pending candidates already in the queue and the tenant's existing deals.
  * Survivors are inserted as `pending`. Fail-soft: a throwing candidate is
  * recorded in `errors` and does not abort the batch.
+ *
+ * Auth-resolving wrapper around ingestCandidatesForTenant, mirroring the
+ * createDeal -> createDealForTenant pattern in deals.ts.
  */
 export async function ingestCandidates(
   candidates: ScrapedCandidate[],
   opts?: IngestOptions
 ): Promise<IngestSummary> {
   const { tenantId } = await requireTenant();
+  return ingestCandidatesForTenant(tenantId, candidates, opts);
+}
+
+/**
+ * Ingest a batch of scraped candidates for an already-resolved tenant.
+ *
+ * Holds the shared normalise/fit/dedupe/insert logic so machine callers that
+ * have no auth session (a scheduled Deal Radar run, the token-guarded ingress)
+ * can queue candidates by passing the tenantId explicitly, without a session.
+ * ingestCandidates() is the auth-resolving wrapper.
+ */
+export async function ingestCandidatesForTenant(
+  tenantId: string,
+  candidates: ScrapedCandidate[],
+  opts?: IngestOptions
+): Promise<IngestSummary> {
   const capturedFor = opts?.capturedFor ?? todayIso();
 
   const summary: IngestSummary = { inserted: 0, skipped: 0, errors: [] };
