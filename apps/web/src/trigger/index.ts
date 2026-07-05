@@ -10,6 +10,7 @@ export * from './generate-report';
 export * from './ingest-land-data';
 export * from './ingest-broadband';
 export * from './ingest-boundaries';
+export * from './deal-radar-score';
 // future:
 // export * from './send-share-link';
 // export * from './refresh-public-data';
