@@ -28,7 +28,7 @@ import { getUser } from '@/server/auth/server';
 import { extractPostcode } from '@/server/public-data/geocode';
 import type { Deal } from '@/lib/deal-store';
 
-async function requireTenant(): Promise<{ userId: string; tenantId: string }> {
+export async function requireTenant(): Promise<{ userId: string; tenantId: string }> {
   const user = await getUser();
   if (!user) throw new Error('Not authenticated');
 
@@ -72,15 +72,19 @@ export async function loadDeal(dealId: string) {
   return rows[0] ?? null;
 }
 
-type CreateDealInput = {
+export type CreateDealInput = {
   address: string;
   source: Deal['source'];
   initialInputs?: Partial<Deal>;
 };
 
-export async function createDeal(input: CreateDealInput) {
-  const { tenantId } = await requireTenant();
-
+/**
+ * Insert a deal for an already-resolved tenant. Holds the shared insert/reference
+ * logic so callers that have already resolved a tenant (e.g. batch lead intake in
+ * lead-review.ts) can reuse it without re-running requireTenant() per row.
+ * createDeal() is the auth-resolving wrapper around this.
+ */
+export async function createDealForTenant(tenantId: string, input: CreateDealInput) {
   // Address is mandatory and must carry a valid UK postcode - every downstream
   // public-data and title pull keys off it.
   const postcode = extractPostcode(input.address);
@@ -111,6 +115,11 @@ export async function createDeal(input: CreateDealInput) {
 
   revalidatePath('/dashboard');
   return { id, reference };
+}
+
+export async function createDeal(input: CreateDealInput) {
+  const { tenantId } = await requireTenant();
+  return createDealForTenant(tenantId, input);
 }
 
 /**

@@ -354,8 +354,42 @@ export const shareTokenEvents = pgTable(
   })
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Lead candidates (Stage 2) - inbound lead intake staging. Rows are captured
+// from ingestion/sourcing, reviewed by a partner, then approved (promoted to a
+// deal) or discarded. Mirrors the deals tenant/RLS shape. dealId is set when a
+// candidate is approved and promoted. RLS on with tenant-scoped policies
+// mirroring `deals`; the owner connection bypasses RLS.
+// ─────────────────────────────────────────────────────────────────────────────
+export const leadCandidates = pgTable(
+  'lead_candidates',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'), // 'pending' | 'approved' | 'discarded'
+    address: text('address'),
+    postcode: text('postcode'),
+    source: text('source'),
+    fitPct: integer('fit_pct'),
+    client: text('client'),
+    candidate: jsonb('candidate').notNull().default(sql`'{}'::jsonb`),
+    dealId: text('deal_id').references(() => deals.id, { onDelete: 'set null' }),
+    capturedFor: date('captured_for'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewedBy: text('reviewed_by'),
+  },
+  (table) => ({
+    tenantStatusIdx: index('lead_candidates_tenant_status_idx').on(table.tenantId, table.status),
+    tenantCapturedForIdx: index('lead_candidates_tenant_captured_for_idx').on(table.tenantId, table.capturedFor),
+  })
+);
+
 // Inferred types for application code
 export type Tenant = typeof tenants.$inferSelect;
+export type LeadCandidate = typeof leadCandidates.$inferSelect;
+export type NewLeadCandidate = typeof leadCandidates.$inferInsert;
 export type PublicDataCacheRow = typeof publicDataCache.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type Membership = typeof memberships.$inferSelect;

@@ -54,6 +54,22 @@ export type MortgageType = 'cash' | 'interest-only' | 'repayment';
 export type PipelineStage =
   | 'leads' | 'sourcing' | 'viewing' | 'analysis' | 'report' | 'offer' | 'won' | 'lost' | 'followup';
 
+/**
+ * M5 lead-intake: where a scraped lead came from and the radar signals that
+ * flagged it. Nested jsonb on the Deal (no migration). Populated by
+ * candidateToDealInput in lead-intake.ts.
+ */
+export type LeadSourceMeta = {
+  channel: 'portal' | 'auction' | 'open-data' | 'direct';
+  listingUrl?: string;
+  sourceRef?: string;
+  capturedAt?: string;
+  discountConfidence?: number;
+  discountReasons?: string[];
+  estMarketValue?: number;
+  estAchievable?: number;
+};
+
 export type Comp = {
   id: string;
   address: string;
@@ -389,6 +405,9 @@ export type Deal = {
   // migration). When unset, the board derives a stage from wizard progress.
   pipelineStage?: PipelineStage;
   followUpAt?: string;   // ISO date for the next follow-up, if scheduled
+
+  // M5 lead-intake: provenance + radar signals for a scraped lead (nested jsonb).
+  leadSource?: LeadSourceMeta;
 
   criteria: {
     budget: string;
