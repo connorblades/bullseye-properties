@@ -16,6 +16,7 @@ import { Receipt, ExternalLink, Link2 } from 'lucide-react';
 import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { ShareLinkManager } from '@/components/share-link-manager';
 import { InspectionWalkthrough } from '@/components/inspection-walkthrough';
+import { LegalPackPanel } from '@/components/legal-pack-panel';
 import type { InspectionState } from '@/lib/inspection';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
@@ -115,7 +116,7 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
       {step === 4 && <PropertyForm deal={deal} update={update} />}
       {step === 5 && <CompsPanel kind="sales" deal={deal} update={update} />}
       {step === 6 && <CompsPanel kind="rental" deal={deal} update={update} />}
-      {step === 7 && <AuctionPanel deal={deal} update={update} />}
+      {step === 7 && <LegalPackPanel deal={deal} update={update} />}
       {step === 8 && <ViewingPanel deal={deal} update={update} />}
       {step === 9 && <DueDiligencePanel deal={deal} update={update} />}
       {step === 10 && <GrowthDriversPanel deal={deal} update={update} />}
@@ -449,34 +450,6 @@ function RentEstimateSummary({ deal }: { deal: Deal }) {
         {rent.compCount} like-for-like comp{rent.compCount > 1 ? 's' : ''}, uplifted {rent.growthPctUsed}% a year
         {rent.growthSource === 'local' ? ' (local rent trend)' : rent.growthSource === 'manual' ? ' (your assumption)' : ' (default)'} to {rent.asOfMonth},
         rounded to the nearest £25.{rent.growthSource === 'default' ? ' Set the rental growth on Growth Drivers to change the uplift.' : ''}
-      </div>
-    </div>
-  );
-}
-
-function AuctionPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
-  const set = (k: keyof Deal['auction'], v: string | boolean) => update({ auction: { ...deal.auction, [k]: v } });
-  const isAuction = deal.source === 'auction' || deal.auction.isAuction;
-  if (!isAuction) {
-    return (
-      <div className="card p-10 text-center">
-        <div className="text-xs font-bold text-amber uppercase tracking-wider mb-3">Conditional stage</div>
-        <h3 className="text-lg font-bold text-ink mb-2">Not an auction sale</h3>
-        <p className="text-sm text-ink-mid mb-6">This stage is only required when the property is being sold by auction.</p>
-        <button onClick={() => set('isAuction', true)} className="btn-secondary mx-auto">Mark as auction sale anyway</button>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-4">
-      <div className="card p-5 bg-amber/5 border-amber/20">
-        <div className="text-xs font-bold text-amber uppercase tracking-wider mb-1">Auction sale</div>
-        <div className="text-sm text-ink-mid">Use the Legal Pack Analyser to extract fees and conditions. Integration lands in M2.</div>
-      </div>
-      <div className="card p-8 space-y-5">
-        <Field label="Buyer-side fees (£)"   value={deal.auction.buyerFees}            onChange={(v) => set('buyerFees', v)}            placeholder="2400" />
-        <Field label="Special conditions"    value={deal.auction.specialConditions}    onChange={(v) => set('specialConditions', v)}    placeholder="2 flagged: extension overage, indemnity required" />
-        <Field label="Restrictive covenants" value={deal.auction.restrictiveCovenants} onChange={(v) => set('restrictiveCovenants', v)} placeholder="None" />
       </div>
     </div>
   );

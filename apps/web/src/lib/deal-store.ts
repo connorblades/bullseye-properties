@@ -22,6 +22,7 @@ import {
 } from '@/server/actions/deals';
 import { defaultViewingChecklist } from './viewing';
 import type { InspectionState } from './inspection';
+import type { LegalPackAnalysis } from './legal-pack';
 
 export type StageRating = 'Good' | 'OK' | 'Issue' | '';
 
@@ -447,6 +448,9 @@ export type Deal = {
     buyerFees: string;
     specialConditions: string;
     restrictiveCovenants: string;
+    // M11: server-side Legal Pack Analyser result (four sections + derived
+    // buyer-fees total). Stored in the inputs jsonb, no migration.
+    legalPack?: LegalPackAnalysis;
   };
 
   viewing: {
