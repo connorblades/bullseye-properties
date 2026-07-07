@@ -94,6 +94,22 @@ export type DwellingInput = {
   dormant?: boolean;
   hasCharges?: boolean;
   ownerStatus?: string; // raw CH status text, for the "OWNER INSOLVENT (...)" reason
+  // M10 distress-signal expansion (all fail-soft; absent when a source is down)
+  /** A Gazette forced-sale notice joined to this door/company (winding-up etc). */
+  gazetteEvent?: boolean;
+  /** Short Gazette notice type, e.g. "winding-up" (drives the reason wording). */
+  gazetteNoticeType?: string;
+  /** Whole days since the Gazette notice was published, when known. */
+  gazetteDaysSince?: number;
+  /** How many DISTRESSED companies the owner's PSC also controls (portfolio motivation). */
+  pscControlsDistressed?: number;
+  /** Owner's PSC name (approach-target metadata only, on a company-keyed lead). */
+  pscName?: string;
+  // M10 area-level cohort weight (Council Taxbase empty-homes premium)
+  /** Multiplier applied to the cohort base rate (>= 1; default 1 = no effect). */
+  areaMultiplier?: number;
+  /** True when the local authority is an empty-homes hotspot (drives the reason). */
+  areaHotspot?: boolean;
 };
 
 /** The scored output for a dwelling. */
@@ -128,7 +144,15 @@ const W = {
   confstmtOverdue: 0.08,
   dormant: 0.12,
   hasCharges: 0.08,
+  // M10: a dated Gazette forced-sale notice is the single clearest signal, above
+  // even a bare Companies House "insolvent" status flag.
+  gazetteEvent: 0.45,
+  // M10: a PSC controlling several distressed companies (portfolio unwinding).
+  pscPortfolio: 0.15,
 } as const;
+
+/** A PSC portfolio-distress route fires only when the person controls 2+ distressed cos. */
+const PSC_PORTFOLIO_MIN = 2;
 
 /** Base rate is capped so a single cohort can never dominate the noisy-OR. */
 const BASE_RATE_CAP = 0.6;
@@ -278,12 +302,18 @@ export function scoreDwelling(
     cell && cell.n >= CELL_MIN_N && cell.depth != null ? cell.depth : cohort?.depth ?? DEFAULT_DEPTH;
 
   const rental = (d.tenure ?? '').toLowerCase().includes('rental');
+  const pscPortfolio = (d.pscControlsDistressed ?? 0) >= PSC_PORTFOLIO_MIN;
 
-  // Noisy-OR: 1 - product of (1 - route weight), base rate first (capped).
-  let survive = 1 - Math.min(baseRate, BASE_RATE_CAP);
+  // Noisy-OR: 1 - product of (1 - route weight), base rate first (capped). The
+  // area-level empty-homes weight lifts the cohort base rate before the cap; it
+  // only ever raises the effective base rate (areaMultiplier >= 1).
+  const areaMultiplier = d.areaMultiplier ?? 1;
+  let survive = 1 - Math.min(baseRate * areaMultiplier, BASE_RATE_CAP);
   const route = (active: boolean | undefined, weight: number) => {
     if (active) survive *= 1 - weight;
   };
+  route(d.gazetteEvent, W.gazetteEvent);
+  route(pscPortfolio, W.pscPortfolio);
   route(d.epcGroup === 'FG', W.epcFG);
   route(d.epcGroup === 'DE', W.epcDE);
   route(d.companyOwned, W.companyOwned);
@@ -302,7 +332,14 @@ export function scoreDwelling(
 
   // Ranked reasons, strongest route first (mirrors the proof's reason string).
   const reasons: string[] = [];
+  if (d.gazetteEvent) {
+    const type = d.gazetteNoticeType ?? 'insolvency notice';
+    reasons.push(
+      d.gazetteDaysSince != null ? `Gazette ${type} ${d.gazetteDaysSince} days ago` : `Gazette ${type}`
+    );
+  }
   if (d.insolvent) reasons.push(`OWNER INSOLVENT (${d.ownerStatus ?? 'insolvency'})`);
+  if (pscPortfolio) reasons.push(`PSC controls ${d.pscControlsDistressed} distressed cos`);
   if (d.strikeOff) reasons.push('owner strike-off pending');
   if (d.accountsOverdue) reasons.push('owner accounts overdue');
   if (d.dormant) reasons.push('owner company dormant');
@@ -316,6 +353,7 @@ export function scoreDwelling(
   if (d.streetDisc != null) reasons.push(`hot street ${Math.round(d.streetDisc * 100)}%`);
   if (d.resoldLoss) reasons.push('prior loss-resale');
   else if (d.churned) reasons.push('repeat-sold');
+  if (d.areaHotspot) reasons.push('empty-homes hotspot LA');
   reasons.push(`cohort ${Math.round(baseRate * 100).toFixed(1)}% sell 15%+ under`);
 
   const estMarketValue = marketRaw != null ? round5k(marketRaw) : 0;
@@ -349,6 +387,8 @@ export function dwellingToCandidate(
       discountReasons: score.reasons,
       estMarketValue: score.estMarketValue,
       estAchievable: score.estAchievable,
+      // Approach-target metadata only, on an already company-keyed lead (M10).
+      approachTarget: d.companyOwned ? d.pscName : undefined,
     },
   };
 }
