@@ -37,6 +37,13 @@ export type CandidateRadar = {
   discountReasons?: string[];
   estMarketValue?: number;
   estAchievable?: number;
+  /**
+   * Approach-target metadata on an ALREADY company-keyed lead (M10): the name of
+   * the person with significant control behind the owning company, from Companies
+   * House PSC. Never a discovery source - it only annotates a lead the corporate
+   * (CCOD) join already produced.
+   */
+  approachTarget?: string;
 };
 
 /**
@@ -130,6 +137,7 @@ export function normaliseCandidate(raw: ScrapedCandidate): ScrapedCandidate {
           : undefined,
         estMarketValue: cleanPositive(raw.radar.estMarketValue),
         estAchievable: cleanPositive(raw.radar.estAchievable),
+        approachTarget: cleanString(raw.radar.approachTarget),
       }
     : undefined;
 
