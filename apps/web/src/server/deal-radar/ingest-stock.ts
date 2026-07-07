@@ -24,6 +24,7 @@
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseCsvLine } from '@/server/public-data/land-ownership';
+import { failSoft } from '@/server/public-data/http';
 import {
   computeCohortBaseRate,
   scoreDwelling,
@@ -36,6 +37,24 @@ import {
   type DwellingInput,
   type PropertyType,
 } from './score';
+import {
+  fetchGazetteInsolvency,
+  indexGazetteEvents,
+  normalisePostcodeKey,
+  fetchPsc,
+  buildPscPortfolio,
+  type GazetteInsolvencyEvent,
+  type GazetteIndex,
+  type PscControl,
+  type CompanyPscInput,
+} from './distress-sources';
+import {
+  buildAreaWeightTable,
+  areaMultiplierFor,
+  isEmptyHomesHotspot,
+  type AreaWeightTable,
+  type TaxbaseRow,
+} from './area-weights';
 import type { ScrapedCandidate } from '@/lib/lead-intake';
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -48,6 +67,17 @@ export const RDR_LR_DISTRICTS = (process.env.RDR_LR_DISTRICTS ?? 'BASSETLAW,ROTH
 
 const DEFAULT_DATA_DIR =
   process.env.RDR_DATA_DIR ?? '/Users/connorblades32/Documents/Companies/Bullseye Properties/data/Open Source Data';
+
+/** Gazette insolvency enrichment is off unless deliberately enabled (fail-soft when on). */
+const GAZETTE_ENABLED = process.env.RDR_GAZETTE_ENABLE === 'true';
+/** Companies House PSC enrichment is off unless enabled AND a CH key is present. */
+const PSC_ENABLED = process.env.RDR_PSC_ENABLE === 'true';
+/** Cap on PSC lookups per run (rate-limit / cost guard). */
+const PSC_MAX_LOOKUPS = Number(process.env.RDR_PSC_MAX ?? '500');
+/** Cap on Gazette seed postcodes per run (one call each, postcode + radius). */
+const GAZETTE_MAX_SEEDS = Number(process.env.RDR_GAZETTE_MAX_SEEDS ?? '12');
+/** Optional Council Taxbase CSV extract (localAuthority, dwellings, longTermEmpty, premiumCharged). */
+const TAXBASE_FILE = process.env.RDR_TAXBASE_FILE;
 
 export type StockScoreOptions = {
   dataDir?: string;
@@ -65,6 +95,24 @@ export type StockScoreOptions = {
   capturedAt?: string;
   /** Progress sink. */
   log?: (m: string) => void;
+  // ── M10 distress-signal enrichment (all fail-soft; injectable for tests/dry-runs) ──
+  /**
+   * Pre-built area-weight table (Council Taxbase empty-homes premium). When
+   * omitted, it is loaded fail-soft from RDR_TAXBASE_FILE, else a neutral table.
+   */
+  areaWeights?: AreaWeightTable;
+  /**
+   * Pre-fetched Gazette insolvency events to index. When omitted, they are
+   * fetched fail-soft across patch seed postcodes IF RDR_GAZETTE_ENABLE is set,
+   * else none.
+   */
+  gazetteEvents?: GazetteInsolvencyEvent[];
+  /**
+   * PSC lookup by company_number. When omitted, the real Companies House client
+   * is used IF RDR_PSC_ENABLE is set and a key is present, else PSC is skipped.
+   * Wrapped in failSoft at the call site, so a throwing lookup degrades to [].
+   */
+  pscLookup?: (companyNumber: string) => Promise<PscControl[]>;
 };
 
 /** The AC-15 regression counts, plus the emitted-candidate count. */
@@ -78,6 +126,12 @@ export type StockScoreStats = {
   companiesMatched: number;
   ownerDistress: number;
   emitted: number;
+  // M10 distress-signal enrichment counters.
+  gazetteEvents: number;
+  gazetteHits: number;
+  pscLookups: number;
+  pscPortfolioHits: number;
+  areaHotspotDwellings: number;
 };
 
 export type StockScoreResult = {
@@ -103,6 +157,45 @@ async function* streamCsv(path: string): AsyncGenerator<string[]> {
 function headerIndex(header: string[], name: string): number {
   const target = name.trim().toLowerCase();
   return header.findIndex((h) => h.trim().toLowerCase() === target);
+}
+
+/**
+ * Load a Council Taxbase CSV extract into an area-weight table, fail-soft. The
+ * CSV needs columns localAuthority / dwellings / longTermEmpty / premiumCharged
+ * (header-matched, case-insensitive). Any missing file or parse error yields a
+ * neutral (empty) table so the run is never broken by this source.
+ */
+async function loadAreaWeightTable(path: string | undefined, log: (m: string) => void): Promise<AreaWeightTable> {
+  if (!path) return new Map();
+  const table = await failSoft('rdr-taxbase', async () => {
+    const rows: TaxbaseRow[] = [];
+    let header: string[] | null = null;
+    let col: Record<string, number> = {};
+    for await (const cols of streamCsv(path)) {
+      if (!header) {
+        header = cols;
+        col = {
+          la: headerIndex(header, 'localAuthority'),
+          dwellings: headerIndex(header, 'dwellings'),
+          empty: headerIndex(header, 'longTermEmpty'),
+          premium: headerIndex(header, 'premiumCharged'),
+        };
+        continue;
+      }
+      const localAuthority = (cols[col.la] ?? '').trim();
+      if (!localAuthority) continue;
+      const num = (i: number) => Number((cols[i] ?? '').replace(/[^0-9.]/g, '')) || 0;
+      rows.push({
+        localAuthority,
+        dwellings: num(col.dwellings),
+        longTermEmpty: num(col.empty),
+        premiumCharged: num(col.premium),
+      });
+    }
+    return buildAreaWeightTable(rows);
+  });
+  if (table) log(`Area weights: loaded ${table.size} local authorities from ${path}.`);
+  return table ?? new Map();
 }
 
 const upperTrim = (s: string | undefined) => (s ?? '').trim().toUpperCase();
@@ -175,10 +268,13 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
     floorArea: number;
     tenure: string;
     uprn: string;
+    localAuthority: string;
   };
   const dwellings = new Map<string, { lodged: string; d: Dwelling }>();
   for (const laFile of ['Bassetlaw-certificates.csv', 'Rotherham-certificates.csv']) {
     const path = `${dataDir}/EPC/${laFile}`;
+    // The EPC file is per-LA; the LA name (for the area-weight join) is its stem.
+    const localAuthority = laFile.replace(/-certificates\.csv$/i, '');
     let header: string[] | null = null;
     let col: Record<string, number> = {};
     let kept = 0;
@@ -224,6 +320,7 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
           floorArea: Number.isFinite(floorArea) ? floorArea : 0,
           tenure: (cols[col.tenure] ?? '').trim().toLowerCase(),
           uprn: (cols[col.uprn] ?? '').trim(),
+          localAuthority,
         },
       });
       kept++;
@@ -390,6 +487,60 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
     log(`Companies House: scanned ${scanned}, matched ${chByCompany.size} owning companies`);
   }
 
+  // ── 7.5 M10 distress-signal enrichment (all fail-soft) ───────────────────────
+  const isDistressed = (f: ChFlags) => f.insolvent || f.strikeOff || f.accountsOverdue || f.dormant;
+
+  // 7.5a Area weights: Council Taxbase empty-homes premium per local authority.
+  const areaWeights: AreaWeightTable = opts.areaWeights ?? (await loadAreaWeightTable(TAXBASE_FILE, log));
+
+  // 7.5b Gazette insolvency notices: fetch across patch seed postcodes (one call
+  //      each, postcode + radius), index by company_number and district. Off
+  //      unless enabled or events are injected; a fetch failure yields no events.
+  let gazetteIndex: GazetteIndex = { byCompany: new Map(), byPostcode: new Map() };
+  let gazetteEvents: GazetteInsolvencyEvent[] = opts.gazetteEvents ?? [];
+  if (!opts.gazetteEvents && GAZETTE_ENABLED) {
+    // Seed one representative full postcode per district, capped, to cover the
+    // patch with radius searches without an unbounded fan-out.
+    const seedByDistrict = new Map<string, string>();
+    for (const t of txns) {
+      const dist = districtOf(t.postcode);
+      if (dist && !seedByDistrict.has(dist)) seedByDistrict.set(dist, t.postcode);
+    }
+    const seeds = [...seedByDistrict.values()].slice(0, GAZETTE_MAX_SEEDS);
+    for (const postcode of seeds) {
+      const events = await fetchGazetteInsolvency({ postcode, asOf: capturedAt || undefined, log });
+      gazetteEvents.push(...events);
+    }
+    log(`Gazette insolvency: ${gazetteEvents.length} notices across ${seeds.length} seed postcodes.`);
+  }
+  gazetteIndex = indexGazetteEvents(gazetteEvents);
+
+  // 7.5c Companies House PSC: for the DISTRESSED owning companies only (bounded),
+  //      resolve control persons and roll up "controls N distressed cos". The
+  //      person's name is carried only as approach-target metadata downstream.
+  const pscNameByCompany = new Map<string, string>();
+  let pscPortfolio = new Map<string, { controlsDistressed: number; pscName?: string }>();
+  let pscLookups = 0;
+  const pscLookup =
+    opts.pscLookup ?? (PSC_ENABLED ? (cono: string) => fetchPsc(cono) : undefined);
+  if (pscLookup) {
+    const distressedConums = [...chByCompany.entries()]
+      .filter(([, f]) => isDistressed(f))
+      .map(([cono]) => cono)
+      .slice(0, PSC_MAX_LOOKUPS);
+    const pscInputs: CompanyPscInput[] = [];
+    for (const cono of distressedConums) {
+      // failSoft so even an injected throwing lookup degrades to [] (fail-soft).
+      const pscs = (await failSoft(`rdr-psc ${cono}`, () => pscLookup(cono))) ?? [];
+      pscLookups++;
+      const names = pscs.map((p) => p.name ?? '').filter(Boolean);
+      if (pscs[0]?.name) pscNameByCompany.set(cono, pscs[0].name);
+      pscInputs.push({ companyNumber: cono, distressed: true, pscNames: names });
+    }
+    pscPortfolio = buildPscPortfolio(pscInputs);
+    log(`PSC: ${pscLookups} lookups over distressed owners; portfolio rollup built.`);
+  }
+
   // 8. Score every dwelling (floor 20..500) and collect candidates.
   const stats: StockScoreStats = {
     transactions: txns.length,
@@ -401,6 +552,11 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
     companiesMatched: chByCompany.size,
     ownerDistress: 0,
     emitted: 0,
+    gazetteEvents: gazetteEvents.length,
+    gazetteHits: 0,
+    pscLookups,
+    pscPortfolioHits: 0,
+    areaHotspotDwellings: 0,
   };
   const scored: { input: DwellingInput; score: ReturnType<typeof scoreDwelling> }[] = [];
 
@@ -419,6 +575,10 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
     let hasCharges = false;
     let propertySic = false;
     let ownerStatus: string | undefined;
+    // M10 PSC portfolio + Gazette-by-company, ORed across the door's companies.
+    let pscControlsDistressed = 0;
+    let pscName: string | undefined;
+    let gazetteByCompany: GazetteInsolvencyEvent | undefined;
     if (owner) {
       stats.companyOwned++;
       for (const cono of owner.companyNumbers) {
@@ -432,9 +592,31 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
         hasCharges ||= f.hasCharges;
         propertySic ||= f.propertySic;
         if (f.insolvent && !ownerStatus) ownerStatus = f.status;
+        // PSC portfolio-distress rollup (approach-target name kept as metadata).
+        const port = pscPortfolio.get(cono);
+        if (port && port.controlsDistressed > pscControlsDistressed) {
+          pscControlsDistressed = port.controlsDistressed;
+          pscName = port.pscName ?? pscNameByCompany.get(cono) ?? pscName;
+        } else if (!pscName) {
+          pscName = pscNameByCompany.get(cono) ?? pscName;
+        }
+        // Gazette forced-sale notice matched by company_number (strongest join).
+        const ev = gazetteIndex.byCompany.get(cono);
+        if (ev) gazetteByCompany = ev;
       }
     }
     if (insolvent || strikeOff || accountsOverdue || dormant) stats.ownerDistress++;
+
+    // M10 Gazette: prefer the company_number match; else an exact-postcode notice
+    // (a specific door, not a whole district - the district would over-fire).
+    const gazetteEvent = gazetteByCompany ?? gazetteIndex.byPostcode.get(normalisePostcodeKey(d.postcode));
+    if (gazetteEvent) stats.gazetteHits++;
+    if (pscControlsDistressed >= 2) stats.pscPortfolioHits++;
+
+    // M10 area weight: Council Taxbase empty-homes premium for this LA.
+    const areaMultiplier = areaMultiplierFor(areaWeights, d.localAuthority);
+    const areaHotspot = isEmptyHomesHotspot(areaWeights, d.localAuthority);
+    if (areaHotspot) stats.areaHotspotDwellings++;
 
     // Hot street: strongest matching street at this postcode (address contains it).
     let streetDisc: number | undefined;
@@ -470,6 +652,14 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
       dormant,
       hasCharges,
       ownerStatus,
+      // M10 distress-signal enrichment.
+      gazetteEvent: gazetteEvent ? true : undefined,
+      gazetteNoticeType: gazetteEvent?.noticeType,
+      gazetteDaysSince: gazetteEvent?.daysSinceEvent,
+      pscControlsDistressed: pscControlsDistressed || undefined,
+      pscName,
+      areaMultiplier: areaMultiplier !== 1 ? areaMultiplier : undefined,
+      areaHotspot: areaHotspot || undefined,
     };
     const score = scoreDwelling(input, model, { hpiFactor });
     if (score.confidence >= 0.6) stats.conf60++;
@@ -490,7 +680,8 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
   log(
     `Scored ${stats.dwellingsScored} dwellings: ${stats.conf60} at 60%+, ${stats.conf40} at 40%+, ` +
       `${stats.companyOwned} company-owned, ${stats.epcFG} EPC F/G, ${stats.companiesMatched} companies matched; ` +
-      `emitting ${stats.emitted}`
+      `M10: ${stats.gazetteHits} Gazette-matched (${stats.gazetteEvents} notices), ${stats.pscPortfolioHits} PSC-portfolio, ` +
+      `${stats.areaHotspotDwellings} empty-homes-hotspot; emitting ${stats.emitted}`
   );
   return { stats, candidates };
 }
