@@ -76,10 +76,13 @@ describe('claudeDisabled (kill switch)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Client-bundle key absence (M3-T4): no `'use client'` module may import the
-// server-only Claude internals or reference the API key. The `import
-// 'server-only'` guards in those modules make Next fail the build if this is
-// ever violated; this test catches it earlier, at unit-test time.
+// Client-bundle key absence (M3-T4, extended for M11): no `'use client'` module
+// may import the server-only Claude internals OR the server-only Legal Pack
+// Analyser internals, or reference the API key. The `import 'server-only'`
+// guards in those modules make Next fail the build if this is ever violated;
+// this test catches it earlier, at unit-test time. The legal-pack panel reaches
+// Claude only through the `@/server/actions/legal-pack` Server Action, never
+// through `@/server/legal-pack/*` or `@/server/claude/*`.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('client-bundle does not reach Claude server internals', () => {
   const srcRoot = path.resolve(__dirname, '../../src');
@@ -104,14 +107,25 @@ describe('client-bundle does not reach Claude server internals', () => {
     expect(clientFiles.length).toBeGreaterThan(0);
   });
 
-  it('no client component imports @/server/claude/* or references the API key', () => {
+  it('no client component imports @/server/claude/*, @/server/legal-pack/* or references the API key', () => {
     const offenders: string[] = [];
     for (const f of clientFiles) {
       const src = readFileSync(f, 'utf8');
-      if (/@\/server\/claude\//.test(src) || /ANTHROPIC_API_KEY/.test(src)) {
+      if (/@\/server\/claude\//.test(src) || /@\/server\/legal-pack\//.test(src) || /ANTHROPIC_API_KEY/.test(src)) {
         offenders.push(path.relative(srcRoot, f));
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('the legal-pack panel is a client component and stays clean', () => {
+    const panel = path.join(srcRoot, 'components/legal-pack-panel.tsx');
+    const src = readFileSync(panel, 'utf8');
+    expect(/^['"]use client['"]/.test(src.trimStart())).toBe(true);
+    expect(/@\/server\/legal-pack\//.test(src)).toBe(false);
+    expect(/@\/server\/claude\//.test(src)).toBe(false);
+    expect(/ANTHROPIC_API_KEY/.test(src)).toBe(false);
+    // It reaches the analyser only through the Server Action boundary.
+    expect(/@\/server\/actions\/legal-pack/.test(src)).toBe(true);
   });
 });
