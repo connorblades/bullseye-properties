@@ -144,7 +144,7 @@ export async function ingestCandidatesForTenant(
     }
   }
 
-  if (summary.inserted > 0) revalidatePath('/leads');
+  if (summary.inserted > 0) revalidatePath('/review');
   return summary;
 }
 
@@ -208,7 +208,7 @@ export async function approveCandidate(id: string): Promise<string> {
     })
     .where(and(eq(leadCandidates.id, id), eq(leadCandidates.tenantId, tenantId)));
 
-  revalidatePath('/leads');
+  revalidatePath('/review');
   revalidatePath('/dashboard');
   return dealId;
 }
@@ -227,5 +227,5 @@ export async function discardCandidate(id: string): Promise<void> {
     })
     .where(and(eq(leadCandidates.id, id), eq(leadCandidates.tenantId, tenantId)));
 
-  revalidatePath('/leads');
+  revalidatePath('/review');
 }
