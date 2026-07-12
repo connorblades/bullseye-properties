@@ -19,6 +19,51 @@ import { scoreLeadFit } from './lead-score';
 /** Where a candidate came from, mapped onto Deal.source by mapSource(). */
 export type LeadChannel = 'portal' | 'auction' | 'open-data' | 'direct';
 
+/**
+ * Whether the property is actively for sale right now (on-market: portals,
+ * auctions, Facebook Marketplace, Gumtree) or surfaced by prediction before it
+ * lists (off-market: Deal Radar open-data, cold direct-to-vendor). Shown as a tag
+ * in the review inbox so a partner sees at a glance what kind of lead it is.
+ */
+export type LeadMarket = 'on-market' | 'off-market';
+
+/**
+ * The market tag for a candidate: an explicit `market` always wins (so a
+ * Facebook Marketplace / Gumtree scraper can flag its listings on-market even
+ * though they are private-seller, not portal). Otherwise open-data and direct
+ * default to off-market, portal and auction to on-market.
+ */
+export function leadMarket(c: { channel: LeadChannel; market?: LeadMarket }): LeadMarket {
+  if (c.market === 'on-market' || c.market === 'off-market') return c.market;
+  switch (c.channel) {
+    case 'portal':
+    case 'auction':
+      return 'on-market';
+    case 'open-data':
+    case 'direct':
+    default:
+      return 'off-market';
+  }
+}
+
+/** Default per-channel source labels when the scraper did not name a source. */
+const CHANNEL_LABEL: Record<LeadChannel, string> = {
+  portal: 'Estate agent',
+  auction: 'Auction',
+  'open-data': 'Deal Radar',
+  direct: 'Direct to vendor',
+};
+
+/**
+ * Human-readable source label for a candidate. An explicit `sourceName` (e.g.
+ * "Facebook Marketplace", "Gumtree", "Rightmove") wins; otherwise it falls back
+ * to a sensible label for the channel.
+ */
+export function leadSourceLabel(c: { channel: LeadChannel; sourceName?: string }): string {
+  const named = typeof c.sourceName === 'string' ? c.sourceName.trim() : '';
+  return named || CHANNEL_LABEL[c.channel] || 'Unknown source';
+}
+
 /** Investor criteria carried alongside a candidate (matched-lead intake). */
 export type CandidateCriteria = {
   budget?: string;
@@ -61,6 +106,10 @@ export type ScrapedCandidate = {
   tenure?: string;
   epcRating?: string;
   channel: LeadChannel;
+  /** On-market vs off-market tag; defaults from channel via leadMarket(). */
+  market?: LeadMarket;
+  /** Display name of the source, e.g. "Facebook Marketplace", "Gumtree". */
+  sourceName?: string;
   listingUrl?: string;
   sourceRef?: string;
   capturedAt?: string;
@@ -152,6 +201,8 @@ export function normaliseCandidate(raw: ScrapedCandidate): ScrapedCandidate {
     tenure: cleanString(raw.tenure),
     epcRating: cleanString(raw.epcRating)?.toUpperCase(),
     channel: raw.channel,
+    market: raw.market === 'on-market' || raw.market === 'off-market' ? raw.market : undefined,
+    sourceName: cleanString(raw.sourceName),
     listingUrl: cleanString(raw.listingUrl),
     sourceRef: cleanString(raw.sourceRef),
     capturedAt: cleanString(raw.capturedAt),
@@ -221,6 +272,8 @@ export type CandidateDealInput = {
 /** Nested jsonb metadata recording where a lead came from (no migration). */
 export type LeadSourceMeta = {
   channel: LeadChannel;
+  market?: LeadMarket;
+  sourceName?: string;
   listingUrl?: string;
   sourceRef?: string;
   capturedAt?: string;
@@ -245,6 +298,8 @@ export function candidateToDealInput(raw: ScrapedCandidate): CandidateDealInput 
 
   const leadSource: LeadSourceMeta = {
     channel: c.channel,
+    market: leadMarket(c),
+    sourceName: leadSourceLabel(c),
     listingUrl: c.listingUrl,
     sourceRef: c.sourceRef,
     capturedAt: c.capturedAt,

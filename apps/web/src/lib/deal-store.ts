@@ -62,6 +62,8 @@ export type PipelineStage =
  */
 export type LeadSourceMeta = {
   channel: 'portal' | 'auction' | 'open-data' | 'direct';
+  market?: 'on-market' | 'off-market';
+  sourceName?: string;
   listingUrl?: string;
   sourceRef?: string;
   capturedAt?: string;

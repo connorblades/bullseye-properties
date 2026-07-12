@@ -5,6 +5,8 @@ import {
   composeAddress,
   dedupeKey,
   candidateToDealInput,
+  leadMarket,
+  leadSourceLabel,
   type ScrapedCandidate,
 } from '@/lib/lead-intake';
 
@@ -191,5 +193,59 @@ describe('candidateToDealInput', () => {
     const input = candidateToDealInput(candidate());
     expect(input.initialInputs.client).toBeUndefined();
     expect(input.initialInputs.criteria).toBeUndefined();
+  });
+
+  it('stamps the market tag and source label onto leadSource', () => {
+    const fb = candidateToDealInput(
+      candidate({ channel: 'direct', market: 'on-market', sourceName: 'Facebook Marketplace' })
+    );
+    expect(fb.initialInputs.leadSource?.market).toBe('on-market');
+    expect(fb.initialInputs.leadSource?.sourceName).toBe('Facebook Marketplace');
+
+    const radar = candidateToDealInput(candidate({ channel: 'open-data' }));
+    expect(radar.initialInputs.leadSource?.market).toBe('off-market');
+    expect(radar.initialInputs.leadSource?.sourceName).toBe('Deal Radar');
+  });
+});
+
+describe('leadMarket', () => {
+  it('defaults portal and auction to on-market', () => {
+    expect(leadMarket({ channel: 'portal' })).toBe('on-market');
+    expect(leadMarket({ channel: 'auction' })).toBe('on-market');
+  });
+
+  it('defaults open-data and direct to off-market', () => {
+    expect(leadMarket({ channel: 'open-data' })).toBe('off-market');
+    expect(leadMarket({ channel: 'direct' })).toBe('off-market');
+  });
+
+  it('lets an explicit market override the channel default (Facebook/Gumtree)', () => {
+    expect(leadMarket({ channel: 'direct', market: 'on-market' })).toBe('on-market');
+    expect(leadMarket({ channel: 'portal', market: 'off-market' })).toBe('off-market');
+  });
+});
+
+describe('leadSourceLabel', () => {
+  it('prefers an explicit source name', () => {
+    expect(leadSourceLabel({ channel: 'direct', sourceName: 'Gumtree' })).toBe('Gumtree');
+    expect(leadSourceLabel({ channel: 'portal', sourceName: '  Rightmove ' })).toBe('Rightmove');
+  });
+
+  it('falls back to a per-channel label', () => {
+    expect(leadSourceLabel({ channel: 'portal' })).toBe('Estate agent');
+    expect(leadSourceLabel({ channel: 'auction' })).toBe('Auction');
+    expect(leadSourceLabel({ channel: 'open-data' })).toBe('Deal Radar');
+    expect(leadSourceLabel({ channel: 'direct' })).toBe('Direct to vendor');
+  });
+});
+
+describe('normaliseCandidate carries provenance', () => {
+  it('keeps a valid market and source name, drops an invalid market', () => {
+    const c = normaliseCandidate(candidate({ market: 'on-market', sourceName: '  Facebook Marketplace ' }));
+    expect(c.market).toBe('on-market');
+    expect(c.sourceName).toBe('Facebook Marketplace');
+
+    const bad = normaliseCandidate(candidate({ market: 'sold' as unknown as 'on-market' }));
+    expect(bad.market).toBeUndefined();
   });
 });

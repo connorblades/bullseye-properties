@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Check, Loader2, MapPin, Sparkles, Target, X } from 'lucide-react';
+import { Check, Loader2, MapPin, Sparkles, Tag, Target, X } from 'lucide-react';
 import { Nav } from '@/components/nav';
 import { signOut } from '@/server/actions/auth';
 import {
@@ -11,7 +11,7 @@ import {
   discardCandidate,
 } from '@/server/actions/lead-review';
 import type { LeadCandidate } from '@/server/db/schema';
-import type { ScrapedCandidate } from '@/lib/lead-intake';
+import { leadMarket, leadSourceLabel, type LeadMarket, type ScrapedCandidate } from '@/lib/lead-intake';
 
 /**
  * Daily Deal Review inbox (M5, Stage 4).
@@ -44,6 +44,23 @@ function priceOf(row: LeadCandidate): { label: string; value: number } | null {
   if (typeof cand?.guidePrice === 'number') return { label: 'Guide', value: cand.guidePrice };
   if (typeof cand?.askingPrice === 'number') return { label: 'Asking', value: cand.askingPrice };
   return null;
+}
+
+/** Market tag + human source label off a stored candidate row. */
+function provenanceOf(row: LeadCandidate): { market: LeadMarket; source: string } {
+  const cand = row.candidate as ScrapedCandidate | undefined;
+  const channel = cand?.channel ?? 'open-data';
+  return {
+    market: leadMarket({ channel, market: cand?.market }),
+    source: leadSourceLabel({ channel, sourceName: cand?.sourceName }),
+  };
+}
+
+/** Colour tone for the on-market / off-market tag. */
+function marketTone(market: LeadMarket): string {
+  return market === 'on-market'
+    ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+    : 'text-navy bg-navy/[0.06] border border-navy/15';
 }
 
 export default function ReviewPage() {
@@ -159,6 +176,7 @@ export default function ReviewPage() {
               const fit = row.fitPct ?? 0;
               const busy = pendingId === row.id;
               const reasons = radar?.discountReasons ?? [];
+              const prov = provenanceOf(row);
               return (
                 <div key={row.id} className="card p-6">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -177,6 +195,19 @@ export default function ReviewPage() {
                       className={`inline-flex items-baseline gap-1 text-xs font-bold px-2.5 py-1 rounded ${fitTone(fit)}`}
                     >
                       <span className="text-base font-black">{fit}%</span> fit
+                    </span>
+                  </div>
+
+                  {/* Provenance: on/off-market tag + source */}
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <span
+                      className={`inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${marketTone(prov.market)}`}
+                    >
+                      {prov.market === 'on-market' ? 'On-market' : 'Off-market'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-mid bg-black/[0.03] border border-black/[0.06] px-2 py-0.5 rounded-full">
+                      <Tag size={11} className="text-ink-muted" />
+                      {prov.source}
                     </span>
                   </div>
 
