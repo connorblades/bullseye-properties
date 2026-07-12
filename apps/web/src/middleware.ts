@@ -13,6 +13,26 @@ function clientIp(request: NextRequest): string {
 }
 
 /**
+ * Paths that skip the auth-session gate. Everything else redirects to /login
+ * when there is no user. Exported so the rule is unit-testable (a regression
+ * here silently 307s a route to /login - see the ingress route below).
+ */
+export function isPublicPath(path: string): boolean {
+  return (
+    path === '/' ||
+    path.startsWith('/login') ||
+    path.startsWith('/auth') ||
+    path.startsWith('/_next') ||
+    path.startsWith('/api/public') ||
+    // Machine-to-machine ingress (AC-13): the external scraper has no auth
+    // session, it authenticates with the LEAD_INGEST_TOKEN bearer token inside
+    // the route handler. Without this bypass the middleware redirects the POST
+    // to /login and the endpoint is unreachable.
+    path.startsWith('/api/leads/ingest')
+  );
+}
+
+/**
  * Middleware: rate-limit the public share surfaces, refresh the auth session on
  * every request, and gate protected routes. Unauthenticated requests to gated
  * routes redirect to /login.
@@ -40,12 +60,7 @@ export async function middleware(request: NextRequest) {
 
   const { response, user } = await updateSession(request);
 
-  const isPublic =
-    path === '/' ||
-    path.startsWith('/login') ||
-    path.startsWith('/auth') ||
-    path.startsWith('/_next') ||
-    path.startsWith('/api/public');
+  const isPublic = isPublicPath(path);
 
   // Local dev fail-soft: when Supabase env vars are not yet set (M0 cloud
   // provisioning still pending), don't gate routes — the wizard is reachable
