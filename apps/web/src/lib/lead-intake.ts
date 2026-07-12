@@ -13,7 +13,7 @@
  */
 
 import type { Deal } from './deal-store';
-import { emptyDeal } from './deal-store';
+import { emptyDeal } from './deal-factory';
 import { scoreLeadFit } from './lead-score';
 
 /** Where a candidate came from, mapped onto Deal.source by mapSource(). */
