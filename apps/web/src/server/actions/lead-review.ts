@@ -22,13 +22,16 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { deals, leadCandidates } from '@/server/db/schema';
 import { requireTenant, createDeal } from '@/server/actions/deals';
+import { listActiveInvestorCriteriaForTenant } from '@/server/actions/investor-criteria';
 import {
   normaliseCandidate,
   candidateToDealInput,
   dedupeKey,
-  fitForCandidate,
   type ScrapedCandidate,
+  type StoredCandidate,
+  type LeadMatchSummary,
 } from '@/lib/lead-intake';
+import { matchCandidateToClients, summariseMatch } from '@/lib/investor-match';
 
 export type IngestSummary = {
   inserted: number;
@@ -83,6 +86,11 @@ export async function ingestCandidatesForTenant(
   const summary: IngestSummary = { inserted: 0, skipped: 0, errors: [] };
   if (!Array.isArray(candidates) || candidates.length === 0) return summary;
 
+  // The network's investor briefs, loaded once for the whole batch. Every
+  // candidate is scored against these so each lead lands carrying its best match
+  // (BSE-OPP-P01 M1). An empty store means every lead is flagged unmatched.
+  const investors = await listActiveInvestorCriteriaForTenant(tenantId);
+
   // Existing dedupe keys: pending candidates + existing deals for this tenant.
   const seen = new Set<string>();
 
@@ -121,7 +129,11 @@ export async function ingestCandidatesForTenant(
         continue;
       }
 
-      const fitPct = fitForCandidate(c);
+      // Score this lead against the whole investor store; the best match rides
+      // onto the row (fitPct + client column) and its full summary is stored in
+      // the candidate jsonb for the review card and the approved deal.
+      const match = summariseMatch(matchCandidateToClients(c, investors));
+      const stored: StoredCandidate = { ...c, match };
 
       await db.insert(leadCandidates).values({
         id: `lc-${ulid()}`,
@@ -130,9 +142,9 @@ export async function ingestCandidatesForTenant(
         address: c.address || null,
         postcode: c.postcode ?? null,
         source: c.channel,
-        fitPct,
-        client: c.client ?? null,
-        candidate: c as unknown as Record<string, unknown>,
+        fitPct: match.pct,
+        client: match.matched ? (match.investorName ?? null) : (c.client ?? null),
+        candidate: stored as unknown as Record<string, unknown>,
         capturedFor,
       });
 
@@ -196,8 +208,9 @@ export async function approveCandidate(id: string): Promise<string> {
   if (!row) throw new Error('Lead candidate not found.');
   if (row.status !== 'pending') throw new Error(`Lead candidate is already ${row.status}.`);
 
-  const candidate = row.candidate as ScrapedCandidate;
-  const { id: dealId } = await createDeal(candidateToDealInput(candidate));
+  const candidate = row.candidate as StoredCandidate;
+  const match: LeadMatchSummary | undefined = candidate.match;
+  const { id: dealId } = await createDeal(candidateToDealInput(candidate, match));
 
   await db
     .update(leadCandidates)

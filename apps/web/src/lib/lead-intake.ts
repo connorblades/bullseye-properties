@@ -290,6 +290,30 @@ export function dedupeKey(c: ScrapedCandidate): string {
   return addr ? `addr:${addr}` : '';
 }
 
+/**
+ * The best-match summary the matcher (investor-match.ts) attaches to a lead at
+ * ingest and persists in the candidate jsonb. Compact by design: the ranked
+ * detail lives in the matcher's return, this is what the review card and the
+ * approved deal need. `matched` is false when no active investor scored above
+ * the fit floor - the lead is still shown, flagged unmatched.
+ */
+export type LeadMatchSummary = {
+  matched: boolean;
+  investorId?: string;
+  investorName?: string;
+  pct: number;
+  reasons: string[];
+  /** Next-best investors (name + fit), for context on the card. */
+  alternatives?: { name: string; pct: number }[];
+};
+
+/**
+ * A stored lead_candidate's `candidate` jsonb: the normalised ScrapedCandidate
+ * plus the match summary written at ingest. Cast target for reads of the row's
+ * jsonb (the column is untyped at rest).
+ */
+export type StoredCandidate = ScrapedCandidate & { match?: LeadMatchSummary };
+
 /** The exact shape createDeal() consumes. */
 export type CandidateDealInput = {
   address: string;
@@ -318,8 +342,17 @@ export type LeadSourceMeta = {
  *   - initialInputs seeds pipelineStage 'leads', client, criteria, property
  *     (type/bedrooms/askingPrice), financials (purchasePrice from guide/asking,
  *     monthlyRent from expectedRent), and a leadSource metadata group.
+ *
+ * When a `match` is supplied (BSE-OPP-P01 M1) and it matched an investor, the
+ * deal is attached to that investor: `client` becomes the investor's name and a
+ * `matchedInvestor` block (id, fit, reasons) rides onto the deal so the pipeline
+ * knows who the lead is for. An explicit matched investor wins over the
+ * candidate's own `client`.
  */
-export function candidateToDealInput(raw: ScrapedCandidate): CandidateDealInput {
+export function candidateToDealInput(
+  raw: ScrapedCandidate,
+  match?: LeadMatchSummary
+): CandidateDealInput {
   const c = normaliseCandidate(raw);
 
   const purchasePrice = c.guidePrice ?? c.askingPrice;
@@ -342,7 +375,19 @@ export function candidateToDealInput(raw: ScrapedCandidate): CandidateDealInput 
     leadSource,
   };
 
-  if (c.client) initialInputs.client = c.client;
+  // A matched investor is the deal's client and rides on as matchedInvestor;
+  // otherwise fall back to any client the candidate itself carried.
+  if (match?.matched && match.investorName) {
+    initialInputs.client = match.investorName;
+    initialInputs.matchedInvestor = {
+      id: match.investorId ?? '',
+      name: match.investorName,
+      pct: match.pct,
+      reasons: match.reasons,
+    };
+  } else if (c.client) {
+    initialInputs.client = c.client;
+  }
 
   if (c.criteria) {
     initialInputs.criteria = {

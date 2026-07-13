@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Check, ExternalLink, Loader2, MapPin, Sparkles, Tag, Target, X } from 'lucide-react';
+import { Check, ExternalLink, Loader2, MapPin, Sparkles, Tag, Target, UserCheck, UserX, X } from 'lucide-react';
 import { Nav } from '@/components/nav';
 import { signOut } from '@/server/actions/auth';
 import {
@@ -11,7 +11,7 @@ import {
   discardCandidate,
 } from '@/server/actions/lead-review';
 import type { LeadCandidate } from '@/server/db/schema';
-import { leadMarket, leadSourceLabel, type LeadMarket, type ScrapedCandidate } from '@/lib/lead-intake';
+import { leadMarket, leadSourceLabel, type LeadMarket, type LeadMatchSummary, type StoredCandidate } from '@/lib/lead-intake';
 
 /**
  * Daily Deal Review inbox (M5, Stage 4).
@@ -33,14 +33,20 @@ function fitTone(pct: number): string {
 }
 
 /** Read the radar block off a stored candidate row (jsonb, best-effort). */
-function radarOf(row: LeadCandidate): ScrapedCandidate['radar'] {
-  const cand = row.candidate as ScrapedCandidate | undefined;
+function radarOf(row: LeadCandidate): StoredCandidate['radar'] {
+  const cand = row.candidate as StoredCandidate | undefined;
   return cand?.radar;
+}
+
+/** The investor-match summary stored on the candidate at ingest, if any. */
+function matchOf(row: LeadCandidate): LeadMatchSummary | undefined {
+  const cand = row.candidate as StoredCandidate | undefined;
+  return cand?.match;
 }
 
 /** Guide/asking price off a stored candidate row. */
 function priceOf(row: LeadCandidate): { label: string; value: number } | null {
-  const cand = row.candidate as ScrapedCandidate | undefined;
+  const cand = row.candidate as StoredCandidate | undefined;
   if (typeof cand?.guidePrice === 'number') return { label: 'Guide', value: cand.guidePrice };
   if (typeof cand?.askingPrice === 'number') return { label: 'Asking', value: cand.askingPrice };
   return null;
@@ -48,7 +54,7 @@ function priceOf(row: LeadCandidate): { label: string; value: number } | null {
 
 /** Market tag + human source label off a stored candidate row. */
 function provenanceOf(row: LeadCandidate): { market: LeadMarket; source: string } {
-  const cand = row.candidate as ScrapedCandidate | undefined;
+  const cand = row.candidate as StoredCandidate | undefined;
   const channel = cand?.channel ?? 'open-data';
   return {
     market: leadMarket({ channel, market: cand?.market }),
@@ -65,16 +71,16 @@ function marketTone(market: LeadMarket): string {
 
 /** The listing URL off a stored candidate row, if any. */
 function listingUrlOf(row: LeadCandidate): string | null {
-  const cand = row.candidate as ScrapedCandidate | undefined;
+  const cand = row.candidate as StoredCandidate | undefined;
   const url = cand?.listingUrl;
   return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
 }
 
 /**
- * Headline badge, top-right of the card. Fit % is only meaningful when the lead
- * carries investor criteria; sourced leads (Deal Radar / auction) have none, so
- * fit is 0. For those, show the discount below estimated market value instead -
- * the signal that actually matters - falling back to nothing.
+ * Headline badge, top-right of the card. Fit % is the network match score (M1):
+ * a lead that matched an investor shows "N% fit". A lead that matched no active
+ * brief has fit 0; for those, show the discount below estimated market value
+ * instead - the signal that actually matters - falling back to nothing.
  */
 function headlineBadge(row: LeadCandidate): { label: string; sub: string; tone: string } | null {
   const fit = row.fitPct ?? 0;
@@ -212,10 +218,10 @@ export default function ReviewPage() {
                       <div className="font-black text-ink text-lg leading-snug">
                         {row.address ?? 'Unknown address'}
                       </div>
-                      {(row.postcode || row.client) && (
+                      {row.postcode && (
                         <div className="flex items-center gap-1.5 text-sm text-ink-muted mt-0.5">
                           <MapPin size={13} />
-                          {[row.postcode, row.client].filter(Boolean).join(' · ')}
+                          {row.postcode}
                         </div>
                       )}
                     </div>
@@ -227,6 +233,42 @@ export default function ReviewPage() {
                       </span>
                     )}
                   </div>
+
+                  {/* Investor match: who this lead is for, and why (M1 moonshot) */}
+                  {(() => {
+                    const match = matchOf(row);
+                    if (match?.matched && match.investorName) {
+                      return (
+                        <div className="mt-3 rounded-lg border border-success/25 bg-success-light/30 px-3 py-2">
+                          <div className="flex items-center gap-1.5 text-sm">
+                            <UserCheck size={14} className="text-success-dark shrink-0" />
+                            <span className="font-bold text-ink">
+                              {match.pct}% fit for {match.investorName}
+                            </span>
+                          </div>
+                          {match.reasons.length > 0 && (
+                            <div className="text-xs text-ink-mid mt-1 pl-[22px]">
+                              because {match.reasons.slice(0, 4).join(' · ')}
+                            </div>
+                          )}
+                          {match.alternatives && match.alternatives.length > 0 && (
+                            <div className="text-[11px] text-ink-muted mt-1 pl-[22px]">
+                              also fits {match.alternatives.map((a) => `${a.name} (${a.pct}%)`).join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    if (match) {
+                      return (
+                        <div className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-mid bg-black/[0.03] border border-black/[0.06] px-2.5 py-1 rounded-full">
+                          <UserX size={13} className="text-ink-muted" />
+                          Unmatched — no investor brief fits yet
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {/* Provenance: on/off-market tag + source */}
                   <div className="flex items-center gap-2 mt-3 flex-wrap">

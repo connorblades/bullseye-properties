@@ -386,10 +386,44 @@ export const leadCandidates = pgTable(
   })
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Investor criteria (BSE-OPP-P01 M1) - the network's investor briefs, tenant-
+// scoped. Every ingested lead is scored against every active row so the review
+// inbox can show "N% fit for [Investor]". Criteria are stored as free text
+// mirroring the `Deal.criteria` contract (budget "£350,000", target_yield "7%",
+// areas as a comma list) so `scoreLeadFit` scores against them with no
+// conversion. RLS on with tenant-scoped policies mirroring `deals`; the owner
+// connection bypasses RLS. See migration 0010.
+// ─────────────────────────────────────────────────────────────────────────────
+export const investorCriteria = pgTable(
+  'investor_criteria',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    budget: text('budget'),
+    areas: text('areas'),
+    propertyType: text('property_type'),
+    targetYield: text('target_yield'),
+    strategy: text('strategy'),
+    notes: text('notes'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    tenantIdx: index('investor_criteria_tenant_idx').on(table.tenantId),
+    tenantActiveIdx: index('investor_criteria_tenant_active_idx').on(table.tenantId, table.active),
+  })
+);
+
 // Inferred types for application code
 export type Tenant = typeof tenants.$inferSelect;
 export type LeadCandidate = typeof leadCandidates.$inferSelect;
 export type NewLeadCandidate = typeof leadCandidates.$inferInsert;
+export type InvestorCriteriaRow = typeof investorCriteria.$inferSelect;
+export type NewInvestorCriteria = typeof investorCriteria.$inferInsert;
 export type PublicDataCacheRow = typeof publicDataCache.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type Membership = typeof memberships.$inferSelect;
