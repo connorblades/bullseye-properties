@@ -22,7 +22,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { deals, leadCandidates } from '@/server/db/schema';
 import { requireTenant, createDeal } from '@/server/actions/deals';
-import { listActiveInvestorCriteriaForTenant } from '@/server/actions/investor-criteria';
+import { listActiveInvestorCriteriaForTenant } from '@/server/investor-criteria/store';
 import {
   normaliseCandidate,
   candidateToDealInput,

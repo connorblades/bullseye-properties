@@ -16,7 +16,6 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { investorCriteria } from '@/server/db/schema';
 import { requireTenant } from '@/server/actions/deals';
-import type { InvestorCriteria } from '@/lib/investor-match';
 import type { ParsedInvestor } from '@/lib/investor-csv';
 
 /** The editable fields of an investor brief (everything but the identifiers). */
@@ -35,38 +34,6 @@ export type InvestorCriteriaInput = {
 function orNull(s: string | undefined): string | null {
   const t = (s ?? '').trim();
   return t.length > 0 ? t : null;
-}
-
-/**
- * The tenant's active investor briefs, in the matcher's input shape. Called by
- * the ingestion matching pass (per batch) and by the /clients list. Active-only
- * so a paused investor is excluded from matching without deleting the row.
- */
-export async function listActiveInvestorCriteriaForTenant(
-  tenantId: string
-): Promise<InvestorCriteria[]> {
-  const rows = await db
-    .select()
-    .from(investorCriteria)
-    .where(
-      and(
-        eq(investorCriteria.tenantId, tenantId),
-        eq(investorCriteria.active, true),
-        isNull(investorCriteria.deletedAt)
-      )
-    )
-    .orderBy(asc(investorCriteria.name));
-
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    budget: r.budget,
-    areas: r.areas,
-    propertyType: r.propertyType,
-    targetYield: r.targetYield,
-    strategy: r.strategy,
-    notes: r.notes,
-  }));
 }
 
 /**
