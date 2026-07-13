@@ -74,6 +74,8 @@ describe('POST /api/leads/ingest - auth and validation', () => {
     );
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toMatchObject({ inserted: 0, skipped: 0, errors: [], results: [] });
+    // Delegates to ingestCandidatesForTenant, which returns early (no DB) on an
+    // empty batch with { inserted, skipped, errors }.
+    expect(json).toMatchObject({ inserted: 0, skipped: 0, errors: [] });
   });
 });

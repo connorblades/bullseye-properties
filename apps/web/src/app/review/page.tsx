@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Check, Loader2, MapPin, Sparkles, Tag, Target, X } from 'lucide-react';
+import { Check, ExternalLink, Loader2, MapPin, Sparkles, Tag, Target, X } from 'lucide-react';
 import { Nav } from '@/components/nav';
 import { signOut } from '@/server/actions/auth';
 import {
@@ -61,6 +61,33 @@ function marketTone(market: LeadMarket): string {
   return market === 'on-market'
     ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
     : 'text-navy bg-navy/[0.06] border border-navy/15';
+}
+
+/** The listing URL off a stored candidate row, if any. */
+function listingUrlOf(row: LeadCandidate): string | null {
+  const cand = row.candidate as ScrapedCandidate | undefined;
+  const url = cand?.listingUrl;
+  return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
+}
+
+/**
+ * Headline badge, top-right of the card. Fit % is only meaningful when the lead
+ * carries investor criteria; sourced leads (Deal Radar / auction) have none, so
+ * fit is 0. For those, show the discount below estimated market value instead -
+ * the signal that actually matters - falling back to nothing.
+ */
+function headlineBadge(row: LeadCandidate): { label: string; sub: string; tone: string } | null {
+  const fit = row.fitPct ?? 0;
+  if (fit > 0) return { label: `${fit}%`, sub: 'fit', tone: fitTone(fit) };
+
+  const radar = radarOf(row);
+  const price = priceOf(row);
+  const est = radar?.estMarketValue;
+  if (typeof est === 'number' && price && est > price.value) {
+    const below = Math.round((1 - price.value / est) * 100);
+    return { label: `${below}%`, sub: 'below', tone: 'text-emerald-700 bg-emerald-50' };
+  }
+  return null;
 }
 
 export default function ReviewPage() {
@@ -177,6 +204,8 @@ export default function ReviewPage() {
               const busy = pendingId === row.id;
               const reasons = radar?.discountReasons ?? [];
               const prov = provenanceOf(row);
+              const badge = headlineBadge(row);
+              const listingUrl = listingUrlOf(row);
               return (
                 <div key={row.id} className="card p-6">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -191,11 +220,13 @@ export default function ReviewPage() {
                         </div>
                       )}
                     </div>
-                    <span
-                      className={`inline-flex items-baseline gap-1 text-xs font-bold px-2.5 py-1 rounded ${fitTone(fit)}`}
-                    >
-                      <span className="text-base font-black">{fit}%</span> fit
-                    </span>
+                    {badge && (
+                      <span
+                        className={`inline-flex items-baseline gap-1 text-xs font-bold px-2.5 py-1 rounded ${badge.tone}`}
+                      >
+                        <span className="text-base font-black">{badge.label}</span> {badge.sub}
+                      </span>
+                    )}
                   </div>
 
                   {/* Provenance: on/off-market tag + source */}
