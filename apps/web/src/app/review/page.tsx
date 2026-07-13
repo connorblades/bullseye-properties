@@ -200,7 +200,6 @@ export default function ReviewPage() {
             {rows.map((row) => {
               const radar = radarOf(row);
               const price = priceOf(row);
-              const fit = row.fitPct ?? 0;
               const busy = pendingId === row.id;
               const reasons = radar?.discountReasons ?? [];
               const prov = provenanceOf(row);
@@ -240,6 +239,17 @@ export default function ReviewPage() {
                       <Tag size={11} className="text-ink-muted" />
                       {prov.source}
                     </span>
+                    {listingUrl && (
+                      <a
+                        href={listingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-navy hover:text-navy-dark bg-navy/[0.04] border border-navy/15 px-2 py-0.5 rounded-full transition"
+                      >
+                        <ExternalLink size={11} />
+                        View listing
+                      </a>
+                    )}
                   </div>
 
                   {/* Pricing + valuation */}

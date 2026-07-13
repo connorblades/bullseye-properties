@@ -125,6 +125,13 @@ function cleanString(s?: string): string | undefined {
   return t.length > 0 ? t : undefined;
 }
 
+/** Keep a trimmed value only when it is an absolute http(s) URL, else undefined. */
+function cleanHttpUrl(s?: string): string | undefined {
+  const t = cleanString(s);
+  if (!t) return undefined;
+  return /^https?:\/\/\S+$/i.test(t) ? t : undefined;
+}
+
 /** Coerce to a finite positive number, or undefined. */
 function cleanPositive(n?: number): number | undefined {
   if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return undefined;
@@ -203,7 +210,7 @@ export function normaliseCandidate(raw: ScrapedCandidate): ScrapedCandidate {
     channel: raw.channel,
     market: raw.market === 'on-market' || raw.market === 'off-market' ? raw.market : undefined,
     sourceName: cleanString(raw.sourceName),
-    listingUrl: cleanString(raw.listingUrl),
+    listingUrl: cleanHttpUrl(raw.listingUrl),
     sourceRef: cleanString(raw.sourceRef),
     capturedAt: cleanString(raw.capturedAt),
     client: cleanString(raw.client),
@@ -249,17 +256,38 @@ export function composeAddress(c: ScrapedCandidate): string {
   return `${address}, ${pc}`;
 }
 
+/** Lowercase, strip punctuation, collapse whitespace: an address dedupe token. */
+function normaliseAddressKey(address?: string): string {
+  return (address ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
 /**
- * Dedupe key: compact upper-case postcode + the first house-number token from
- * the address. Two listings for the same door collapse to the same key even if
- * one came from a portal and one from auction. Empty string when neither the
- * postcode nor a house number is known.
+ * Dedupe key for one physical door.
+ *
+ * With a postcode it is the strong key - compact upper-case postcode + the first
+ * house-number token - so the same door collapses to one lead even when one copy
+ * came from a portal and one from auction (`NG185QH:12`).
+ *
+ * Without a postcode it falls back to the full normalised address (house number
+ * + street + town, e.g. `addr:12 blyth road worksop`). The bare postcode key
+ * would be `:12` for EVERY no-postcode listing sharing a house number, so all but
+ * the first collide and are wrongly skipped as duplicates - roughly half the
+ * portal yield, which often omits the postcode. The address form still dedupes
+ * exact re-posts (idempotent feeder re-runs) while keeping different streets and
+ * towns distinct. The `addr:` prefix can never collide with a postcode key.
+ *
+ * Empty string only when neither a postcode nor any address text is known.
  */
 export function dedupeKey(c: ScrapedCandidate): string {
   const pc = c.postcode ? compactPostcode(c.postcode) : '';
-  const numMatch = (c.address ?? '').match(/\d+[A-Za-z]?/);
-  const num = numMatch ? numMatch[0].toUpperCase() : '';
-  return `${pc}:${num}`;
+  if (pc) {
+    const numMatch = (c.address ?? '').match(/\d+[A-Za-z]?/);
+    const num = numMatch ? numMatch[0].toUpperCase() : '';
+    return `${pc}:${num}`;
+  }
+
+  const addr = normaliseAddressKey(c.address);
+  return addr ? `addr:${addr}` : '';
 }
 
 /** The exact shape createDeal() consumes. */
