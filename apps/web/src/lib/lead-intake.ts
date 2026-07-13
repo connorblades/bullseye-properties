@@ -308,11 +308,58 @@ export type LeadMatchSummary = {
 };
 
 /**
+ * One like-for-like comparable behind an in-platform discount (BSE-OPP-P01 M2).
+ * A Land Registry sale (street-level, no house number), so the card can show the
+ * evidence that proves the discount: "S64 terraced, £96,000 (2024-08)".
+ */
+export type DiscountComp = {
+  street: string;
+  town: string;
+  ptype: string;
+  price: number;
+  date: string;
+};
+
+/**
+ * The evidence behind an in-platform discount score (BSE-OPP-P01 M2, AC-05):
+ * the comparable median the listing was tested against, how the cohort was found,
+ * the threshold used, and a sample of the comps themselves. Persisted on the
+ * stored candidate so the review card can show the comps that prove the discount,
+ * not just a headline percentage.
+ */
+export type DiscountEvidence = {
+  /** Like-for-like comparable median (raw, pre-round). */
+  medianComp: number;
+  /** Number of like-for-like comps behind the median. */
+  compCount: number;
+  /** How the cohort was found. */
+  matchBasis: 'district' | 'town';
+  /** The bucket named in the reasons (postcode district or town). */
+  bucketLabel: string;
+  /** Percent below the median (1dp). */
+  discountVsMedian: number;
+  /** The discount threshold applied (0..1; e.g. 0.85 = flag at 15%+ below). */
+  threshold: number;
+  /** A sample of the comps behind the median (capped for storage). */
+  comps: DiscountComp[];
+};
+
+/**
  * A stored lead_candidate's `candidate` jsonb: the normalised ScrapedCandidate
  * plus the match summary written at ingest. Cast target for reads of the row's
  * jsonb (the column is untyped at rest).
+ *
+ * `sources` (M2) is the cross-source provenance list: when the same physical door
+ * arrives from more than one source (Rightmove + auction + open-data), the lead is
+ * not duplicated - each source is appended here and the strongest discount signal
+ * is promoted to the top-level radar. `discountEvidence` (M2) is the comps behind
+ * an in-platform discount score.
  */
-export type StoredCandidate = ScrapedCandidate & { match?: LeadMatchSummary };
+export type StoredCandidate = ScrapedCandidate & {
+  match?: LeadMatchSummary;
+  sources?: LeadSourceMeta[];
+  discountEvidence?: DiscountEvidence;
+};
 
 /** The exact shape createDeal() consumes. */
 export type CandidateDealInput = {
@@ -336,6 +383,118 @@ export type LeadSourceMeta = {
 };
 
 /**
+ * Distil a normalised candidate into one provenance record. The resolved market
+ * tag and source label are baked in (leadMarket/leadSourceLabel) so a stored
+ * source reads the same whether it came in explicit or defaulted from channel.
+ */
+export function toLeadSourceMeta(c: ScrapedCandidate): LeadSourceMeta {
+  return {
+    channel: c.channel,
+    market: leadMarket(c),
+    sourceName: leadSourceLabel(c),
+    listingUrl: c.listingUrl,
+    sourceRef: c.sourceRef,
+    capturedAt: c.capturedAt,
+    discountConfidence: c.radar?.discountConfidence,
+    discountReasons: c.radar?.discountReasons,
+    estMarketValue: c.radar?.estMarketValue,
+    estAchievable: c.radar?.estAchievable,
+  };
+}
+
+/** Identity of one source, for deduping the sources[] list (M2). */
+function sourceIdentity(s: LeadSourceMeta): string {
+  return [s.channel, s.sourceName ?? '', s.listingUrl ?? '', s.sourceRef ?? '']
+    .join('|')
+    .toLowerCase();
+}
+
+/** The discount signal strength of a source, for picking the primary (M2). */
+function sourceDiscount(s: LeadSourceMeta): number {
+  return typeof s.discountConfidence === 'number' && Number.isFinite(s.discountConfidence)
+    ? s.discountConfidence
+    : -1;
+}
+
+/**
+ * The provenance list for a stored candidate: an explicit `sources` array when it
+ * already carries one, else a single record distilled from its own fields. Lets
+ * merge logic treat legacy single-source rows (pre-M2) and multi-source rows
+ * uniformly.
+ */
+export function candidateSources(c: StoredCandidate): LeadSourceMeta[] {
+  if (Array.isArray(c.sources) && c.sources.length > 0) return c.sources;
+  return [toLeadSourceMeta(c)];
+}
+
+/**
+ * Merge a newly-ingested candidate for the SAME physical door into an existing
+ * stored candidate (BSE-OPP-P01 M2, AC-01 cross-source dedupe).
+ *
+ * The existing lead is kept - it is never duplicated. The incoming source is
+ * appended to `sources` (deduped by identity), the strongest discount signal
+ * across all sources is promoted to the top-level radar / listing link so the
+ * card headlines the best evidence, and physical facts the existing lead lacked
+ * (bedrooms, property type, prices, postcode, EPC) are backfilled from the
+ * incoming copy.
+ *
+ * Returns `{ candidate, added }`. `added` is false when the incoming source was
+ * already present (an idempotent re-post of the same source) - the caller treats
+ * that as a no-op so re-running a feeder changes nothing.
+ */
+export function mergeStoredCandidate(
+  existing: StoredCandidate,
+  incoming: ScrapedCandidate
+): { candidate: StoredCandidate; added: boolean } {
+  const inc = normaliseCandidate(incoming);
+  const incMeta = toLeadSourceMeta(inc);
+
+  const sources = candidateSources(existing).slice();
+  const incId = sourceIdentity(incMeta);
+  const added = !sources.some((s) => sourceIdentity(s) === incId);
+  if (added) sources.push(incMeta);
+
+  // The primary source drives the headline discount + link: the deepest discount
+  // confidence wins (ties keep the incumbent, i.e. the earliest strong source).
+  const primary = sources.reduce((best, s) => (sourceDiscount(s) > sourceDiscount(best) ? s : best), sources[0]);
+
+  const merged: StoredCandidate = {
+    ...existing,
+    // Backfill physical facts the existing lead was missing.
+    postcode: existing.postcode ?? inc.postcode,
+    propertyType: existing.propertyType ?? inc.propertyType,
+    bedrooms: existing.bedrooms ?? inc.bedrooms,
+    guidePrice: existing.guidePrice ?? inc.guidePrice,
+    askingPrice: existing.askingPrice ?? inc.askingPrice,
+    expectedRent: existing.expectedRent ?? inc.expectedRent,
+    tenure: existing.tenure ?? inc.tenure,
+    epcRating: existing.epcRating ?? inc.epcRating,
+    // Promote the primary source's provenance + discount evidence to the top level.
+    channel: primary.channel,
+    market: primary.market,
+    sourceName: primary.sourceName,
+    listingUrl: primary.listingUrl ?? existing.listingUrl,
+    radar: {
+      ...existing.radar,
+      discountConfidence: primary.discountConfidence,
+      discountReasons: primary.discountReasons,
+      estMarketValue: primary.estMarketValue,
+      estAchievable: primary.estAchievable,
+    },
+    sources,
+  };
+
+  // The discountEvidence block describes the currently-headlined source (it is
+  // written by the in-platform scorer for whichever source was primary at insert).
+  // If merging promotes a different source to primary, the stored evidence no
+  // longer describes the headline, so drop it rather than show mismatched comps.
+  const existingPrimaryId = sourceIdentity(toLeadSourceMeta(existing));
+  if (sourceIdentity(primary) !== existingPrimaryId) merged.discountEvidence = undefined;
+
+  return { candidate: merged, added };
+}
+
+/**
  * Turn a scraped candidate into createDeal() input. Normalises first, then:
  *   - address carries the postcode (composeAddress)
  *   - source is mapped from channel
@@ -357,23 +516,19 @@ export function candidateToDealInput(
 
   const purchasePrice = c.guidePrice ?? c.askingPrice;
 
-  const leadSource: LeadSourceMeta = {
-    channel: c.channel,
-    market: leadMarket(c),
-    sourceName: leadSourceLabel(c),
-    listingUrl: c.listingUrl,
-    sourceRef: c.sourceRef,
-    capturedAt: c.capturedAt,
-    discountConfidence: c.radar?.discountConfidence,
-    discountReasons: c.radar?.discountReasons,
-    estMarketValue: c.radar?.estMarketValue,
-    estAchievable: c.radar?.estAchievable,
-  };
+  const leadSource = toLeadSourceMeta(c);
 
   const initialInputs: Partial<Deal> = {
     pipelineStage: 'leads',
     leadSource,
   };
+
+  // Carry the full cross-source provenance onto the deal when the door was found
+  // via more than one source (M2), so the approved deal keeps every link.
+  const storedSources = (raw as StoredCandidate).sources;
+  if (Array.isArray(storedSources) && storedSources.length > 1) {
+    initialInputs.leadSources = storedSources;
+  }
 
   // A matched investor is the deal's client and rides on as matchedInvestor;
   // otherwise fall back to any client the candidate itself carried.
