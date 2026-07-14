@@ -410,7 +410,11 @@ export type Deal = {
   followUpAt?: string;   // ISO date for the next follow-up, if scheduled
 
   // M5 lead-intake: provenance + radar signals for a scraped lead (nested jsonb).
+  // leadSource is the primary (strongest-discount) source; leadSources (M2) is the
+  // full cross-source provenance when the same door was found via more than one
+  // source, so the approved deal keeps every link it was surfaced from.
   leadSource?: LeadSourceMeta;
+  leadSources?: LeadSourceMeta[];
 
   // BSE-OPP-P01 M1: the network investor this lead was matched to at ingest,
   // attached to the deal on approve. Nested jsonb (no migration). `client` above

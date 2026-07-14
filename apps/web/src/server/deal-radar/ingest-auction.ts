@@ -108,24 +108,33 @@ const upperTrim = (s: string | undefined) => (s ?? '').trim().toUpperCase();
 const LR = { price: 1, xferDate: 2, postcode: 3, ptype: 4, street: 9, town: 11, district: 12, ppdCat: 14 } as const;
 const RESI_TYPES = new Set<PropertyType>(['D', 'S', 'T', 'F']);
 
-// ── Main pipeline ────────────────────────────────────────────────────────────
+// ── Comp index (shared) ───────────────────────────────────────────────────────
+
+export type PatchCompIndexOptions = {
+  dataDir?: string;
+  /** LR district names defining the patch. Defaults to RDR_AUCTION_LR_DISTRICTS. */
+  lrDistricts?: string[];
+  log?: (m: string) => void;
+};
 
 /**
- * Stream the patch's Land Registry sales into comparable indexes, pull the live
- * listings from the feed adapter, and match each listing against its cohort.
- * Returns the discounted listings as emit-ready ScrapedCandidates plus stats.
+ * Stream the patch's Land Registry Price Paid files into the district+town
+ * comparable indexes (never buffering the multi-GB files). Shared by the auction
+ * worker (computeAuctionMatches) and the in-platform on-market scorer
+ * (on-market-score.ts) so both price against the identical comp set.
+ *
+ * The Land Registry files live under `RDR_DATA_DIR` (Connor's Mac). A missing
+ * data directory throws from the underlying read stream - callers that must be
+ * fail-soft (the ingest path) wrap this in a try/catch and skip in-platform
+ * scoring when the data is not present (the M3 hosting follow-up).
  */
-export async function computeAuctionMatches(opts: AuctionScoreOptions = {}): Promise<AuctionScoreResult> {
+export async function buildPatchCompIndex(
+  opts: PatchCompIndexOptions = {}
+): Promise<{ index: CompIndex; comps: number }> {
   const dataDir = opts.dataDir ?? DEFAULT_DATA_DIR;
   const lrDistricts = new Set((opts.lrDistricts ?? RDR_AUCTION_LR_DISTRICTS).map((d) => d.toUpperCase()));
-  const hpiFactor = opts.hpiFactor ?? 1;
-  const threshold = opts.threshold ?? undefined; // matchListing default 0.85
-  const run = opts.run ?? 'local';
-  const capturedAt = opts.capturedAt ?? '';
   const log = opts.log ?? (() => {});
 
-  // 1. Land Registry: qualifying residential type-A sales in the patch districts,
-  //    as comparables keyed by postcode district + town + street + ptype.
   const comps: AuctionComp[] = [];
   for (const year of [2023, 2024, 2025, 2026]) {
     const path = `${dataDir}/Land Reg/pp-${year}.csv`;
@@ -154,6 +163,27 @@ export async function computeAuctionMatches(opts: AuctionScoreOptions = {}): Pro
   }
   const index: CompIndex = buildCompIndex(comps);
   log(`Comp index: ${comps.length} comps, ${index.byDistrict.size} district keys, ${index.byTown.size} town keys`);
+  return { index, comps: comps.length };
+}
+
+// ── Main pipeline ────────────────────────────────────────────────────────────
+
+/**
+ * Stream the patch's Land Registry sales into comparable indexes, pull the live
+ * listings from the feed adapter, and match each listing against its cohort.
+ * Returns the discounted listings as emit-ready ScrapedCandidates plus stats.
+ */
+export async function computeAuctionMatches(opts: AuctionScoreOptions = {}): Promise<AuctionScoreResult> {
+  const dataDir = opts.dataDir ?? DEFAULT_DATA_DIR;
+  const lrDistricts = opts.lrDistricts ?? RDR_AUCTION_LR_DISTRICTS;
+  const hpiFactor = opts.hpiFactor ?? 1;
+  const threshold = opts.threshold ?? undefined; // matchListing default 0.85
+  const run = opts.run ?? 'local';
+  const capturedAt = opts.capturedAt ?? '';
+  const log = opts.log ?? (() => {});
+
+  // 1. Land Registry comparables, keyed by postcode district + town + street + ptype.
+  const { index, comps } = await buildPatchCompIndex({ dataDir, lrDistricts, log });
 
   // 2. Live listings from the feed adapter (fixture or licensed HTTP feed; never a scraper).
   const listings: AuctionListing[] = await fetchLiveListings({
@@ -164,7 +194,7 @@ export async function computeAuctionMatches(opts: AuctionScoreOptions = {}): Pro
 
   // 3. Match each listing; emit the discounted ones as auction candidates.
   const stats: AuctionScoreStats = {
-    comps: comps.length,
+    comps,
     districtKeys: index.byDistrict.size,
     townKeys: index.byTown.size,
     listings: listings.length,

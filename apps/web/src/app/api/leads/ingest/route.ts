@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { ingestCandidatesForTenant } from '@/server/actions/lead-review';
-import type { ScrapedCandidate } from '@/lib/lead-intake';
+import { validateCandidateBatch, FEEDER_CONTRACT_VERSION } from '@/lib/feeder-contract';
 
 /**
  * Machine ingress for the external scraper (M5, Stage 5).
@@ -65,6 +65,19 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'candidates must be an array.' }, { status: 400 });
   }
 
-  const summary = await ingestCandidatesForTenant(tenantId, candidates as ScrapedCandidate[]);
-  return Response.json(summary);
+  // Validate each item against the feeder contract BEFORE ingest, so a malformed
+  // listing is rejected with a clear per-item reason (never silently mangled).
+  // Accepted items proceed; rejects are reported alongside any ingest errors.
+  const { valid, invalid } = validateCandidateBatch(candidates);
+  const summary = await ingestCandidatesForTenant(tenantId, valid);
+
+  return Response.json({
+    ...summary,
+    skipped: summary.skipped + invalid.length,
+    errors: [
+      ...summary.errors,
+      ...invalid.map((v) => ({ address: v.address, reason: `candidates[${v.index}]: ${v.reason}` })),
+    ],
+    contractVersion: FEEDER_CONTRACT_VERSION,
+  });
 }

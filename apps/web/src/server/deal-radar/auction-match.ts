@@ -110,6 +110,8 @@ export type AuctionMatch = {
   matchBasis: 'district' | 'town';
   /** The bucket the reason names ("S64" for a district match, the town otherwise). */
   bucketLabel: string;
+  /** The like-for-like comps behind the median (the evidence that proves the discount). */
+  likeComps: AuctionComp[];
 };
 
 /** Options for matchListing (the sanity cap + the HPI seam live on the caller). */
@@ -289,14 +291,16 @@ export function matchListing(l: AuctionListing, index: CompIndex, opts: MatchOpt
   }
   if (comps.length === 0) return null;
 
-  const allPrices = comps.map((c) => c.price).filter((p) => p > 0 && p <= maxCompPrice);
-  if (allPrices.length === 0) return null;
+  const capped = comps.filter((c) => c.price > 0 && c.price <= maxCompPrice);
+  if (capped.length === 0) return null;
 
-  // Like-for-like price band; fall back to all capped comps if too tight.
+  // Like-for-like price band; fall back to all capped comps if too tight. Track the
+  // comp rows (not just prices) so the evidence can name the comps behind the median.
   const lo = price * LIKE_BAND_LO;
   const hi = price * LIKE_BAND_HI;
-  let likePrices = allPrices.filter((p) => p >= lo && p <= hi);
-  if (likePrices.length < MIN_LIKE_COMPS) likePrices = allPrices;
+  let likeComps = capped.filter((c) => c.price >= lo && c.price <= hi);
+  if (likeComps.length < MIN_LIKE_COMPS) likeComps = capped;
+  const likePrices = likeComps.map((c) => c.price);
 
   const medianComp = median(likePrices) ?? 0;
   if (medianComp <= 0) return null;
@@ -316,6 +320,7 @@ export function matchListing(l: AuctionListing, index: CompIndex, opts: MatchOpt
     discountVsAvg: discountPct(price, avgComp),
     matchBasis,
     bucketLabel,
+    likeComps,
   };
 }
 

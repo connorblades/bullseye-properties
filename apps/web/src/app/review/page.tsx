@@ -11,7 +11,16 @@ import {
   discardCandidate,
 } from '@/server/actions/lead-review';
 import type { LeadCandidate } from '@/server/db/schema';
-import { leadMarket, leadSourceLabel, type LeadMarket, type LeadMatchSummary, type StoredCandidate } from '@/lib/lead-intake';
+import {
+  candidateSources,
+  leadMarket,
+  leadSourceLabel,
+  type DiscountEvidence,
+  type LeadMarket,
+  type LeadMatchSummary,
+  type LeadSourceMeta,
+  type StoredCandidate,
+} from '@/lib/lead-intake';
 
 /**
  * Daily Deal Review inbox (M5, Stage 4).
@@ -69,12 +78,19 @@ function marketTone(market: LeadMarket): string {
     : 'text-navy bg-navy/[0.06] border border-navy/15';
 }
 
-/** The listing URL off a stored candidate row, if any. */
-function listingUrlOf(row: LeadCandidate): string | null {
+/** Every source this door was found from (M2 cross-source dedupe), best-effort. */
+function sourcesOf(row: LeadCandidate): LeadSourceMeta[] {
   const cand = row.candidate as StoredCandidate | undefined;
-  const url = cand?.listingUrl;
-  return typeof url === 'string' && /^https?:\/\//.test(url) ? url : null;
+  return cand ? candidateSources(cand) : [];
 }
+
+/** The in-platform discount evidence (comps behind the discount), if scored (M2). */
+function evidenceOf(row: LeadCandidate): DiscountEvidence | undefined {
+  const cand = row.candidate as StoredCandidate | undefined;
+  return cand?.discountEvidence;
+}
+
+const isHttp = (u?: string): u is string => typeof u === 'string' && /^https?:\/\//.test(u);
 
 /**
  * Headline badge, top-right of the card. Fit % is the network match score (M1):
@@ -210,7 +226,15 @@ export default function ReviewPage() {
               const reasons = radar?.discountReasons ?? [];
               const prov = provenanceOf(row);
               const badge = headlineBadge(row);
-              const listingUrl = listingUrlOf(row);
+              const sources = sourcesOf(row);
+              const sourceNames = Array.from(
+                new Set(sources.map((s) => s.sourceName).filter((n): n is string => !!n))
+              );
+              // One link per distinct listing URL, keeping its source name for the label.
+              const sourceLinks = sources.filter(
+                (s, i) => isHttp(s.listingUrl) && sources.findIndex((o) => o.listingUrl === s.listingUrl) === i
+              );
+              const evidence = evidenceOf(row);
               return (
                 <div key={row.id} className="card p-6">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -270,28 +294,41 @@ export default function ReviewPage() {
                     return null;
                   })()}
 
-                  {/* Provenance: on/off-market tag + source */}
+                  {/* Provenance: on/off-market tag + every source this door came from (M2) */}
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
                     <span
                       className={`inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${marketTone(prov.market)}`}
                     >
                       {prov.market === 'on-market' ? 'On-market' : 'Off-market'}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-mid bg-black/[0.03] border border-black/[0.06] px-2 py-0.5 rounded-full">
-                      <Tag size={11} className="text-ink-muted" />
-                      {prov.source}
-                    </span>
-                    {listingUrl && (
+                    {sourceNames.length === 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-mid bg-black/[0.03] border border-black/[0.06] px-2 py-0.5 rounded-full">
+                        <Tag size={11} className="text-ink-muted" />
+                        {prov.source}
+                      </span>
+                    ) : (
+                      sourceNames.map((name) => (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-mid bg-black/[0.03] border border-black/[0.06] px-2 py-0.5 rounded-full"
+                        >
+                          <Tag size={11} className="text-ink-muted" />
+                          {name}
+                        </span>
+                      ))
+                    )}
+                    {sourceLinks.map((s) => (
                       <a
-                        href={listingUrl}
+                        key={s.listingUrl}
+                        href={s.listingUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-navy hover:text-navy-dark bg-navy/[0.04] border border-navy/15 px-2 py-0.5 rounded-full transition"
                       >
                         <ExternalLink size={11} />
-                        View listing
+                        {sourceLinks.length > 1 && s.sourceName ? `View on ${s.sourceName}` : 'View listing'}
                       </a>
-                    )}
+                    ))}
                   </div>
 
                   {/* Pricing + valuation */}
@@ -346,6 +383,30 @@ export default function ReviewPage() {
                           ))}
                         </ol>
                       )}
+                    </div>
+                  )}
+
+                  {/* Comparable evidence: the comps that prove the in-platform discount (M2) */}
+                  {evidence && evidence.comps.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-emerald-200/70 bg-emerald-50/40 px-4 py-3">
+                      <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider mb-1.5">
+                        {Math.round(evidence.discountVsMedian)}% below the {evidence.bucketLabel} median
+                        <span className="text-emerald-700/70 font-semibold normal-case tracking-normal">
+                          {' '}· {evidence.compCount} comps ({evidence.matchBasis} match)
+                        </span>
+                      </div>
+                      <ul className="space-y-0.5">
+                        {evidence.comps.map((c, i) => (
+                          <li key={i} className="flex items-center justify-between gap-3 text-xs text-ink-mid">
+                            <span className="truncate">
+                              {c.street}
+                              <span className="text-ink-muted"> · {c.ptype}</span>
+                              {c.date && <span className="text-ink-muted"> · {c.date}</span>}
+                            </span>
+                            <span className="font-bold text-ink tabular-nums shrink-0">{gbp(c.price)}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
 

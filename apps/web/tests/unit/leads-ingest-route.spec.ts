@@ -75,7 +75,26 @@ describe('POST /api/leads/ingest - auth and validation', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     // Delegates to ingestCandidatesForTenant, which returns early (no DB) on an
-    // empty batch with { inserted, skipped, errors }.
-    expect(json).toMatchObject({ inserted: 0, skipped: 0, errors: [] });
+    // empty batch with { inserted, merged, skipped, errors } + contractVersion.
+    expect(json).toMatchObject({ inserted: 0, merged: 0, skipped: 0, errors: [] });
+    expect(json.contractVersion).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('reports malformed items per-item without a DB write (all-invalid batch)', async () => {
+    vi.stubEnv('LEAD_INGEST_TOKEN', TOKEN);
+    // Every item fails validation, so nothing valid reaches ingest (no DB): the
+    // route reports each rejection and counts them in skipped.
+    const res = await POST(
+      makeReq(
+        { tenantId: 't', candidates: [{ channel: 'portal' }, { address: '2 X', channel: 'bogus' }] },
+        TOKEN
+      )
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.inserted).toBe(0);
+    expect(json.skipped).toBe(2);
+    expect(json.errors).toHaveLength(2);
+    expect(json.errors[0].reason).toContain('candidates[0]');
   });
 });

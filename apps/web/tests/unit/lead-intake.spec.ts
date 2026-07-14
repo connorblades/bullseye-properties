@@ -7,7 +7,11 @@ import {
   candidateToDealInput,
   leadMarket,
   leadSourceLabel,
+  toLeadSourceMeta,
+  candidateSources,
+  mergeStoredCandidate,
   type ScrapedCandidate,
+  type StoredCandidate,
 } from '@/lib/lead-intake';
 
 function candidate(overrides: Partial<ScrapedCandidate> = {}): ScrapedCandidate {
@@ -16,6 +20,12 @@ function candidate(overrides: Partial<ScrapedCandidate> = {}): ScrapedCandidate 
     channel: 'portal',
     ...overrides,
   };
+}
+
+/** Build a stored candidate the way ingest does: normalised + a single source. */
+function stored(overrides: Partial<ScrapedCandidate> = {}): StoredCandidate {
+  const c = normaliseCandidate(candidate(overrides));
+  return { ...c, sources: [toLeadSourceMeta(c)] };
 }
 
 describe('normaliseCandidate', () => {
@@ -290,5 +300,94 @@ describe('normaliseCandidate carries provenance', () => {
 
     const bad = normaliseCandidate(candidate({ market: 'sold' as unknown as 'on-market' }));
     expect(bad.market).toBeUndefined();
+  });
+});
+
+describe('toLeadSourceMeta / candidateSources', () => {
+  it('bakes the resolved market + source label into the provenance record', () => {
+    const meta = toLeadSourceMeta(normaliseCandidate(candidate({ channel: 'auction', sourceName: 'EIG' })));
+    expect(meta.channel).toBe('auction');
+    expect(meta.market).toBe('on-market'); // auction defaults on-market
+    expect(meta.sourceName).toBe('EIG');
+  });
+
+  it('derives a single source for a legacy row that carries no sources[]', () => {
+    const legacy = normaliseCandidate(candidate({ sourceName: 'Rightmove' })) as StoredCandidate;
+    const sources = candidateSources(legacy);
+    expect(sources).toHaveLength(1);
+    expect(sources[0].sourceName).toBe('Rightmove');
+  });
+});
+
+describe('mergeStoredCandidate (M2 cross-source dedupe)', () => {
+  it('appends a new source and keeps one lead (Rightmove + auction -> two sources)', () => {
+    const rm = stored({ channel: 'portal', sourceName: 'Rightmove', askingPrice: 120_000 });
+    const auction = candidate({
+      channel: 'auction',
+      sourceName: 'EIG',
+      guidePrice: 100_000,
+      radar: { discountConfidence: 0.3, discountReasons: ['guide 20% below'], estMarketValue: 130_000 },
+    });
+    const { candidate: merged, added } = mergeStoredCandidate(rm, auction);
+    expect(added).toBe(true);
+    expect(merged.sources).toHaveLength(2);
+    expect(merged.sources!.map((s) => s.sourceName).sort()).toEqual(['EIG', 'Rightmove']);
+  });
+
+  it('promotes the strongest discount signal to the headline radar', () => {
+    const rm = stored({ channel: 'portal', sourceName: 'Rightmove', askingPrice: 120_000 });
+    const auction = candidate({
+      channel: 'auction',
+      sourceName: 'EIG',
+      guidePrice: 100_000,
+      radar: { discountConfidence: 0.3, estMarketValue: 130_000 },
+    });
+    const { candidate: merged } = mergeStoredCandidate(rm, auction);
+    // The auction source carried the only discount signal, so it headlines.
+    expect(merged.radar?.discountConfidence).toBe(0.3);
+    expect(merged.radar?.estMarketValue).toBe(130_000);
+    expect(merged.sourceName).toBe('EIG');
+  });
+
+  it('is a no-op when the incoming source is already held (idempotent re-post)', () => {
+    const rm = stored({ channel: 'portal', sourceName: 'Rightmove', listingUrl: 'https://rm/1', askingPrice: 120_000 });
+    const { candidate: merged, added } = mergeStoredCandidate(rm, candidate({
+      channel: 'portal',
+      sourceName: 'Rightmove',
+      listingUrl: 'https://rm/1',
+      askingPrice: 120_000,
+    }));
+    expect(added).toBe(false);
+    expect(merged.sources).toHaveLength(1);
+  });
+
+  it('backfills physical facts the existing lead was missing', () => {
+    const bare = stored({ channel: 'auction', sourceName: 'EIG', guidePrice: 100_000 });
+    const rich = candidate({ channel: 'portal', sourceName: 'Rightmove', bedrooms: 3, propertyType: 'Terraced', askingPrice: 120_000 });
+    const { candidate: merged } = mergeStoredCandidate(bare, rich);
+    expect(merged.bedrooms).toBe(3);
+    expect(merged.propertyType).toBe('Terraced');
+    // The existing guide price is not overwritten by the incoming asking price.
+    expect(merged.guidePrice).toBe(100_000);
+  });
+
+  it('drops stale discount evidence when a different source becomes primary', () => {
+    const rmScored: StoredCandidate = {
+      ...stored({ channel: 'portal', sourceName: 'Rightmove', askingPrice: 120_000 }),
+      discountEvidence: {
+        medianComp: 130_000,
+        compCount: 8,
+        matchBasis: 'district',
+        bucketLabel: 'S64',
+        discountVsMedian: 8,
+        threshold: 0.85,
+        comps: [{ street: 'CHURCH ST', town: 'swinton', ptype: 'Terraced', price: 130_000, date: '2024-01-01' }],
+      },
+    };
+    // Existing Rightmove has no discount signal; a stronger auction source takes over.
+    const auction = candidate({ channel: 'auction', sourceName: 'EIG', guidePrice: 90_000, radar: { discountConfidence: 0.4, estMarketValue: 130_000 } });
+    const { candidate: merged } = mergeStoredCandidate(rmScored, auction);
+    expect(merged.sourceName).toBe('EIG');
+    expect(merged.discountEvidence).toBeUndefined();
   });
 });
