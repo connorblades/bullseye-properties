@@ -412,6 +412,16 @@ export type Deal = {
   // M5 lead-intake: provenance + radar signals for a scraped lead (nested jsonb).
   leadSource?: LeadSourceMeta;
 
+  // BSE-OPP-P01 M1: the network investor this lead was matched to at ingest,
+  // attached to the deal on approve. Nested jsonb (no migration). `client` above
+  // mirrors `name` for display; this block keeps the id, fit and reasons.
+  matchedInvestor?: {
+    id: string;
+    name: string;
+    pct: number;
+    reasons: string[];
+  };
+
   criteria: {
     budget: string;
     areas: string;
