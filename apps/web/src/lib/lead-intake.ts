@@ -77,6 +77,25 @@ export type CandidateCriteria = {
  * value estimates are in whole pounds. All optional - a candidate may arrive
  * before radar has run.
  */
+/**
+ * Off-market negotiability (BSE-OPP-P01 M3, AC-06): the probability the owner
+ * would accept a below-market offer, fused onto an on-market listing even at full
+ * asking price, with ranked reasons. Distinct from `discountConfidence`, which is
+ * the listing-vs-comp discount - a full-asking listing has negotiability but no
+ * discount, so the two live side by side on the card and feed the M4 ranking
+ * independently.
+ */
+export type NegotiabilityScore = {
+  /** Probability 0..1 the owner would take a below-market offer (Deal Radar propensity). */
+  probability: number;
+  /** Ranked, plain-English reasons (cohort base rate, EPC, ownership, empty-homes, distress). */
+  reasons: string[];
+  /** Size-normalised, HPI-adjusted estimated value, present only when floor area is known. */
+  estMarketValue?: number;
+  /** The cohort discount base rate the propensity started from (pre-signals; for ranking). */
+  baseRate: number;
+};
+
 export type CandidateRadar = {
   discountConfidence?: number;
   discountReasons?: string[];
@@ -89,6 +108,8 @@ export type CandidateRadar = {
    * (CCOD) join already produced.
    */
   approachTarget?: string;
+  /** Off-market negotiability fused onto an on-market listing (M3, AC-06). */
+  negotiability?: NegotiabilityScore;
 };
 
 /**
@@ -185,6 +206,17 @@ export function normaliseCandidate(raw: ScrapedCandidate): ScrapedCandidate {
       }
     : undefined;
 
+  const negotiability = raw.radar?.negotiability
+    ? {
+        probability: cleanNonNegative(raw.radar.negotiability.probability) ?? 0,
+        reasons: Array.isArray(raw.radar.negotiability.reasons)
+          ? raw.radar.negotiability.reasons.map((r) => cleanString(r)).filter((r): r is string => !!r)
+          : [],
+        estMarketValue: cleanPositive(raw.radar.negotiability.estMarketValue),
+        baseRate: cleanNonNegative(raw.radar.negotiability.baseRate) ?? 0,
+      }
+    : undefined;
+
   const radar = raw.radar
     ? {
         discountConfidence: cleanNonNegative(raw.radar.discountConfidence),
@@ -194,6 +226,7 @@ export function normaliseCandidate(raw: ScrapedCandidate): ScrapedCandidate {
         estMarketValue: cleanPositive(raw.radar.estMarketValue),
         estAchievable: cleanPositive(raw.radar.estAchievable),
         approachTarget: cleanString(raw.radar.approachTarget),
+        negotiability,
       }
     : undefined;
 
