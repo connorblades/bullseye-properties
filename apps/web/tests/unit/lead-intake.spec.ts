@@ -32,6 +32,18 @@ describe('normaliseCandidate', () => {
     expect(c.client).toBeUndefined();
   });
 
+  it('keeps a valid http(s) listing URL and drops anything else', () => {
+    expect(normaliseCandidate(candidate({ listingUrl: 'https://rightmove.co.uk/p/1' })).listingUrl).toBe(
+      'https://rightmove.co.uk/p/1'
+    );
+    expect(normaliseCandidate(candidate({ listingUrl: 'http://example.com/lot/2' })).listingUrl).toBe(
+      'http://example.com/lot/2'
+    );
+    expect(normaliseCandidate(candidate({ listingUrl: 'javascript:alert(1)' })).listingUrl).toBeUndefined();
+    expect(normaliseCandidate(candidate({ listingUrl: '/relative/path' })).listingUrl).toBeUndefined();
+    expect(normaliseCandidate(candidate({ listingUrl: '   ' })).listingUrl).toBeUndefined();
+  });
+
   it('drops non-positive/invalid numbers but keeps 0 bedrooms', () => {
     const c = normaliseCandidate(candidate({
       guidePrice: 0,
@@ -134,6 +146,37 @@ describe('dedupeKey', () => {
   it('captures a house-number letter suffix', () => {
     const c = normaliseCandidate(candidate({ address: '12a Browning Street, NG18 5QH' }));
     expect(dedupeKey(c)).toBe('NG185QH:12A');
+  });
+
+  it('falls back to the full street+town address when there is no postcode', () => {
+    const c = normaliseCandidate(candidate({ address: '12 Blyth Road, Worksop', postcode: undefined }));
+    expect(dedupeKey(c)).toBe('addr:12 blyth road worksop');
+  });
+
+  it('keeps no-postcode listings on different streets distinct (the yield fix)', () => {
+    // Both share house number 12; the old ":12" key collapsed them into one and
+    // dropped the second as a duplicate. The street+town fallback keeps them apart.
+    const a = normaliseCandidate(candidate({ address: '12 Blyth Road, Worksop', postcode: undefined }));
+    const b = normaliseCandidate(candidate({ address: '12 High Street, Retford', postcode: undefined }));
+    expect(dedupeKey(a)).not.toBe(dedupeKey(b));
+  });
+
+  it('collapses an identical no-postcode listing re-posted (idempotent re-run)', () => {
+    const first = normaliseCandidate(candidate({ address: '12 Blyth Road, Worksop', channel: 'portal', postcode: undefined }));
+    const again = normaliseCandidate(candidate({ address: '12 Blyth Road,  Worksop', channel: 'auction', postcode: undefined }));
+    expect(dedupeKey(first)).toBe(dedupeKey(again));
+  });
+
+  it('never collides a no-postcode address key with a postcode key', () => {
+    const noPc = normaliseCandidate(candidate({ address: '12 Blyth Road, Worksop', postcode: undefined }));
+    const withPc = normaliseCandidate(candidate({ address: '12 Blyth Road, Worksop', postcode: 'S81 0JD' }));
+    expect(dedupeKey(noPc)).not.toBe(dedupeKey(withPc));
+    expect(dedupeKey(noPc).startsWith('addr:')).toBe(true);
+  });
+
+  it('is empty only when neither a postcode nor any address text is known', () => {
+    const c = normaliseCandidate(candidate({ address: '', postcode: undefined }));
+    expect(dedupeKey(c)).toBe('');
   });
 });
 

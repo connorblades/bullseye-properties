@@ -107,9 +107,11 @@ export async function ingestCandidatesForTenant(
       const c = normaliseCandidate(raw);
       const key = dedupeKey(c);
 
-      // A meaningless key (no postcode and no house number) can't be deduped
-      // reliably; skip it rather than flooding the queue with collisions.
-      if (key === ':' || key === '') {
+      // A candidate with neither a postcode nor any address text can't be deduped
+      // reliably; skip it rather than flooding the queue with collisions. (A
+      // no-postcode listing WITH an address now keys off street + town, so it is
+      // no longer dropped here - the M0 fix for ~half the portal yield.)
+      if (key === '' || key === ':') {
         summary.skipped++;
         continue;
       }
