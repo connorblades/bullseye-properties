@@ -19,6 +19,7 @@ import {
   type LeadMarket,
   type LeadMatchSummary,
   type LeadSourceMeta,
+  type NegotiabilityScore,
   type StoredCandidate,
 } from '@/lib/lead-intake';
 
@@ -88,6 +89,11 @@ function sourcesOf(row: LeadCandidate): LeadSourceMeta[] {
 function evidenceOf(row: LeadCandidate): DiscountEvidence | undefined {
   const cand = row.candidate as StoredCandidate | undefined;
   return cand?.discountEvidence;
+}
+
+/** The fused off-market negotiability score (probability + reasons), if scored (M3). */
+function negotiabilityOf(row: LeadCandidate): NegotiabilityScore | undefined {
+  return radarOf(row)?.negotiability;
 }
 
 const isHttp = (u?: string): u is string => typeof u === 'string' && /^https?:\/\//.test(u);
@@ -235,6 +241,7 @@ export default function ReviewPage() {
                 (s, i) => isHttp(s.listingUrl) && sources.findIndex((o) => o.listingUrl === s.listingUrl) === i
               );
               const evidence = evidenceOf(row);
+              const negotiability = negotiabilityOf(row);
               return (
                 <div key={row.id} className="card p-6">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -382,6 +389,32 @@ export default function ReviewPage() {
                             </li>
                           ))}
                         </ol>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Off-market negotiability: the owner's propensity to take a discount,
+                      fused onto an on-market listing even at full asking price (M3, AC-06) */}
+                  {negotiability && (
+                    <div className="mt-3 rounded-lg border border-amber-200/70 bg-amber-50/40 px-4 py-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Target size={14} className="text-amber-700" />
+                        <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
+                          Off-market negotiability
+                        </span>
+                        <span className="text-[11px] font-bold text-amber-800">
+                          {Math.round(negotiability.probability * 100)}% likely to negotiate
+                        </span>
+                        {typeof negotiability.estMarketValue === 'number' && (
+                          <span className="text-[11px] font-semibold text-amber-700/80">
+                            · est. {gbp(negotiability.estMarketValue)}
+                          </span>
+                        )}
+                      </div>
+                      {negotiability.reasons.length > 0 && (
+                        <div className="text-xs text-ink-mid">
+                          because {negotiability.reasons.slice(0, 5).join(' · ')}
+                        </div>
                       )}
                     </div>
                   )}

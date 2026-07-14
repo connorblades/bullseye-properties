@@ -213,15 +213,111 @@ const RESI_TYPES = new Set<PropertyType>(['D', 'S', 'T', 'F']);
 
 type Txn = { postcode: string; paonNum: string; ptype: PropertyType; street: string; price: number; date: string };
 
-// ── Main pipeline ────────────────────────────────────────────────────────────
+// ── Patch propensity index (shared by the stock lens + the on-market fusion) ──
 
-export async function computeStockScores(opts: StockScoreOptions = {}): Promise<StockScoreResult> {
+/** One EPC-joined door in the patch, deduped to its latest certificate. */
+export type Dwelling = {
+  postcode: string;
+  paonNum: string;
+  address: string;
+  epc: string;
+  epcGroup: ReturnType<typeof epcGroupOf>;
+  ptype: PropertyType;
+  floorArea: number;
+  tenure: string;
+  uprn: string;
+  localAuthority: string;
+};
+
+/**
+ * A door the signal accessor keys on: postcode+paon identify it, the address
+ * drives the hot-street contains-match, and the local authority (known only for
+ * doors that appear in the EPC data) the empty-homes join.
+ */
+export type DoorRef = {
+  postcode: string;
+  paonNum: string;
+  address: string;
+  localAuthority?: string;
+};
+
+/**
+ * The signal-derived subset of a DwellingInput: everything beyond the door's own
+ * geometry/EPC (ownership, Companies House distress, churn/loss, hot street,
+ * empty-homes weight, Gazette/PSC). Assembled identically for the stock lens and
+ * the on-market fusion so both routes to a negotiability score agree.
+ */
+export type DoorSignals = Pick<
+  DwellingInput,
+  | 'companyOwned'
+  | 'isOverseas'
+  | 'propertySic'
+  | 'churned'
+  | 'resoldLoss'
+  | 'streetDisc'
+  | 'insolvent'
+  | 'strikeOff'
+  | 'accountsOverdue'
+  | 'confstmtOverdue'
+  | 'dormant'
+  | 'hasCharges'
+  | 'ownerStatus'
+  | 'gazetteEvent'
+  | 'gazetteNoticeType'
+  | 'gazetteDaysSince'
+  | 'pscControlsDistressed'
+  | 'pscName'
+  | 'areaMultiplier'
+  | 'areaHotspot'
+>;
+
+/** Index-build counters folded into StockScoreStats by computeStockScores. */
+export type PatchIndexStats = {
+  transactions: number;
+  companiesMatched: number;
+  gazetteEvents: number;
+  pscLookups: number;
+};
+
+/**
+ * The learned patch index: the size-normalised cohort base-rate model plus a
+ * per-door signal accessor, built from the same open-data streams the stock lens
+ * uses. Shared by computeStockScores (which iterates `dwellings` to score standing
+ * stock) and the on-market negotiability fusion (which looks a listing's door up in
+ * `dwellingByJoin` and calls `signalsForDoor`), so both price identically.
+ */
+export type PatchPropensityIndex = {
+  model: CohortModel;
+  coreDistricts: Set<string>;
+  /** Deduped EPC doors keyed `${postcode}|${paonNum}|${address}` (the stock lens iterates these). */
+  dwellings: Map<string, { lodged: string; d: Dwelling }>;
+  /** First door per `${postcode}|${paonNum}|${ptype}` (the sold+EPC / listing join). */
+  dwellingByJoin: Map<string, Dwelling>;
+  ppsqftFor: (district: string, ptype: PropertyType) => number | undefined;
+  signalsForDoor: (door: DoorRef) => DoorSignals;
+  stats: PatchIndexStats;
+};
+
+/** The options buildPatchPropensityIndex reads (the streaming/enrichment subset of StockScoreOptions). */
+export type PatchPropensityOptions = Pick<
+  StockScoreOptions,
+  'dataDir' | 'lrDistricts' | 'capturedAt' | 'log' | 'areaWeights' | 'gazetteEvents' | 'pscLookup'
+>;
+
+/**
+ * Stream the patch open-data files into the propensity index: the cohort model
+ * plus every per-door signal (ownership, Companies House distress, churn/loss, hot
+ * streets, empty-homes area weight, and the fail-soft Gazette/PSC enrichment).
+ * Never buffers the multi-GB files. A missing data directory throws from the read
+ * stream - the fusion caller (lead-review) wraps this in try/catch and skips
+ * scoring fail-soft when the data is not present (the cloud-hosting follow-up);
+ * the local stock-lens caller lets it surface.
+ */
+export async function buildPatchPropensityIndex(
+  opts: PatchPropensityOptions = {}
+): Promise<PatchPropensityIndex> {
   const dataDir = opts.dataDir ?? DEFAULT_DATA_DIR;
   const lrDistricts = new Set((opts.lrDistricts ?? RDR_LR_DISTRICTS).map((d) => d.toUpperCase()));
-  const hpiFactor = opts.hpiFactor ?? 1;
-  const topN = opts.topN ?? 500;
-  const minConfidence = opts.minConfidence ?? 0;
-  const run = opts.run ?? 'local';
   const capturedAt = opts.capturedAt ?? '';
   const log = opts.log ?? (() => {});
 
@@ -258,18 +354,6 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
   log(`Patch: ${txns.length} transactions across ${coreDistricts.size} postcode districts`);
 
   // 2. EPC: dedupe to the latest certificate per door, classify, scope to patch.
-  type Dwelling = {
-    postcode: string;
-    paonNum: string;
-    address: string;
-    epc: string;
-    epcGroup: ReturnType<typeof epcGroupOf>;
-    ptype: PropertyType;
-    floorArea: number;
-    tenure: string;
-    uprn: string;
-    localAuthority: string;
-  };
   const dwellings = new Map<string, { lodged: string; d: Dwelling }>();
   for (const laFile of ['Bassetlaw-certificates.csv', 'Rotherham-certificates.csv']) {
     const path = `${dataDir}/EPC/${laFile}`;
@@ -541,32 +625,13 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
     log(`PSC: ${pscLookups} lookups over distressed owners; portfolio rollup built.`);
   }
 
-  // 8. Score every dwelling (floor 20..500) and collect candidates.
-  const stats: StockScoreStats = {
-    transactions: txns.length,
-    dwellingsScored: 0,
-    conf60: 0,
-    conf40: 0,
-    companyOwned: 0,
-    epcFG: 0,
-    companiesMatched: chByCompany.size,
-    ownerDistress: 0,
-    emitted: 0,
-    gazetteEvents: gazetteEvents.length,
-    gazetteHits: 0,
-    pscLookups,
-    pscPortfolioHits: 0,
-    areaHotspotDwellings: 0,
-  };
-  const scored: { input: DwellingInput; score: ReturnType<typeof scoreDwelling> }[] = [];
-
-  for (const { d } of dwellings.values()) {
-    if (d.floorArea < 20 || d.floorArea > 500) continue;
-    stats.dwellingsScored++;
-    if (d.epcGroup === 'FG') stats.epcFG++;
-
-    const owner = ownerByKey.get(`${d.postcode}|${d.paonNum}`);
-    // OR the Companies House distress flags across every company at this door.
+  // Per-door signal accessor: OR the Companies House distress flags across every
+  // company at the door, resolve the strongest Gazette/PSC-portfolio signal, and
+  // join the churn/hot-street/empty-homes weight. Pure over the built maps, so the
+  // stock lens (below) and the on-market fusion (off-market-score.ts) assemble the
+  // identical signal set for any door.
+  const signalsForDoor = (door: DoorRef): DoorSignals => {
+    const owner = ownerByKey.get(`${door.postcode}|${door.paonNum}`);
     let insolvent = false;
     let strikeOff = false;
     let accountsOverdue = false;
@@ -580,7 +645,6 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
     let pscName: string | undefined;
     let gazetteByCompany: GazetteInsolvencyEvent | undefined;
     if (owner) {
-      stats.companyOwned++;
       for (const cono of owner.companyNumbers) {
         const f = chByCompany.get(cono);
         if (!f) continue;
@@ -605,40 +669,28 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
         if (ev) gazetteByCompany = ev;
       }
     }
-    if (insolvent || strikeOff || accountsOverdue || dormant) stats.ownerDistress++;
 
     // M10 Gazette: prefer the company_number match; else an exact-postcode notice
     // (a specific door, not a whole district - the district would over-fire).
-    const gazetteEvent = gazetteByCompany ?? gazetteIndex.byPostcode.get(normalisePostcodeKey(d.postcode));
-    if (gazetteEvent) stats.gazetteHits++;
-    if (pscControlsDistressed >= 2) stats.pscPortfolioHits++;
+    const gazetteEvent = gazetteByCompany ?? gazetteIndex.byPostcode.get(normalisePostcodeKey(door.postcode));
 
-    // M10 area weight: Council Taxbase empty-homes premium for this LA.
-    const areaMultiplier = areaMultiplierFor(areaWeights, d.localAuthority);
-    const areaHotspot = isEmptyHomesHotspot(areaWeights, d.localAuthority);
-    if (areaHotspot) stats.areaHotspotDwellings++;
+    // M10 area weight: Council Taxbase empty-homes premium for this LA (known only
+    // for doors that appear in the EPC data; a listing off-EPC gets the neutral 1).
+    const areaMultiplier = door.localAuthority ? areaMultiplierFor(areaWeights, door.localAuthority) : 1;
+    const areaHotspot = door.localAuthority ? isEmptyHomesHotspot(areaWeights, door.localAuthority) : false;
 
     // Hot street: strongest matching street at this postcode (address contains it).
     let streetDisc: number | undefined;
-    const hots = hotByPostcode.get(d.postcode);
+    const hots = hotByPostcode.get(door.postcode);
     if (hots) {
       for (const h of hots) {
-        if (h.street && d.address.includes(h.street)) streetDisc = Math.max(streetDisc ?? 0, h.pctDisc);
+        if (h.street && door.address.includes(h.street)) streetDisc = Math.max(streetDisc ?? 0, h.pctDisc);
       }
     }
 
-    const churn = churnByKey.get(`${d.postcode}|${d.paonNum}`);
+    const churn = churnByKey.get(`${door.postcode}|${door.paonNum}`);
 
-    const input: DwellingInput = {
-      address: d.address,
-      postcode: d.postcode,
-      district: districtOf(d.postcode),
-      ptype: d.ptype,
-      epc: d.epc,
-      epcGroup: d.epcGroup,
-      floorArea: d.floorArea,
-      uprn: d.uprn,
-      tenure: d.tenure,
+    return {
       companyOwned: !!owner,
       isOverseas: owner?.isOverseas,
       propertySic,
@@ -661,7 +713,87 @@ export async function computeStockScores(opts: StockScoreOptions = {}): Promise<
       areaMultiplier: areaMultiplier !== 1 ? areaMultiplier : undefined,
       areaHotspot: areaHotspot || undefined,
     };
-    const score = scoreDwelling(input, model, { hpiFactor });
+  };
+
+  return {
+    model,
+    coreDistricts,
+    dwellings,
+    dwellingByJoin,
+    ppsqftFor,
+    signalsForDoor,
+    stats: {
+      transactions: txns.length,
+      companiesMatched: chByCompany.size,
+      gazetteEvents: gazetteEvents.length,
+      pscLookups,
+    },
+  };
+}
+
+// ── Main pipeline ────────────────────────────────────────────────────────────
+
+export async function computeStockScores(opts: StockScoreOptions = {}): Promise<StockScoreResult> {
+  const hpiFactor = opts.hpiFactor ?? 1;
+  const topN = opts.topN ?? 500;
+  const minConfidence = opts.minConfidence ?? 0;
+  const run = opts.run ?? 'local';
+  const capturedAt = opts.capturedAt ?? '';
+  const log = opts.log ?? (() => {});
+
+  // Build the shared patch index (cohort model + per-door signals), then score
+  // every standing dwelling by joining its intrinsic geometry/EPC to those signals.
+  const index = await buildPatchPropensityIndex(opts);
+
+  // 8. Score every dwelling (floor 20..500) and collect candidates.
+  const stats: StockScoreStats = {
+    transactions: index.stats.transactions,
+    dwellingsScored: 0,
+    conf60: 0,
+    conf40: 0,
+    companyOwned: 0,
+    epcFG: 0,
+    companiesMatched: index.stats.companiesMatched,
+    ownerDistress: 0,
+    emitted: 0,
+    gazetteEvents: index.stats.gazetteEvents,
+    gazetteHits: 0,
+    pscLookups: index.stats.pscLookups,
+    pscPortfolioHits: 0,
+    areaHotspotDwellings: 0,
+  };
+  const scored: { input: DwellingInput; score: ReturnType<typeof scoreDwelling> }[] = [];
+
+  for (const { d } of index.dwellings.values()) {
+    if (d.floorArea < 20 || d.floorArea > 500) continue;
+    stats.dwellingsScored++;
+    if (d.epcGroup === 'FG') stats.epcFG++;
+
+    const sig = index.signalsForDoor({
+      postcode: d.postcode,
+      paonNum: d.paonNum,
+      address: d.address,
+      localAuthority: d.localAuthority,
+    });
+    if (sig.companyOwned) stats.companyOwned++;
+    if (sig.insolvent || sig.strikeOff || sig.accountsOverdue || sig.dormant) stats.ownerDistress++;
+    if (sig.gazetteEvent) stats.gazetteHits++;
+    if ((sig.pscControlsDistressed ?? 0) >= 2) stats.pscPortfolioHits++;
+    if (sig.areaHotspot) stats.areaHotspotDwellings++;
+
+    const input: DwellingInput = {
+      address: d.address,
+      postcode: d.postcode,
+      district: districtOf(d.postcode),
+      ptype: d.ptype,
+      epc: d.epc,
+      epcGroup: d.epcGroup,
+      floorArea: d.floorArea,
+      uprn: d.uprn,
+      tenure: d.tenure,
+      ...sig,
+    };
+    const score = scoreDwelling(input, index.model, { hpiFactor });
     if (score.confidence >= 0.6) stats.conf60++;
     if (score.confidence >= 0.4) stats.conf40++;
     scored.push({ input, score });

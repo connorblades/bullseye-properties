@@ -54,6 +54,11 @@ export type IngestOptions = {
    * to RDR_ONMARKET_DISCOUNT_THRESHOLD, else the matcher default (0.85 = 15% below).
    */
   discountThreshold?: number;
+  /**
+   * Scalar HPI factor applied to in-platform estimated values (M3 local HPI seam).
+   * Defaults to RDR_HPI_FACTOR, else 1 (no adjustment).
+   */
+  hpiFactor?: number;
 };
 
 /** The tunable on-market discount threshold: explicit opt, else env, else matcher default. */
@@ -63,6 +68,19 @@ function resolveDiscountThreshold(opts?: IngestOptions): number | undefined {
   }
   const env = Number(process.env.RDR_ONMARKET_DISCOUNT_THRESHOLD);
   return Number.isFinite(env) && env > 0 && env <= 1 ? env : undefined;
+}
+
+/**
+ * The scalar HPI factor applied to in-platform estimated values (M3): the local
+ * HPI seam that brings a size-normalised cohort/comp value to today's money.
+ * Explicit opt, else RDR_HPI_FACTOR, else 1 (no adjustment - the existing default).
+ */
+function resolveHpiFactor(opts?: IngestOptions): number {
+  if (typeof opts?.hpiFactor === 'number' && Number.isFinite(opts.hpiFactor) && opts.hpiFactor > 0) {
+    return opts.hpiFactor;
+  }
+  const env = Number(process.env.RDR_HPI_FACTOR);
+  return Number.isFinite(env) && env > 0 ? env : 1;
 }
 
 /** Today's date as YYYY-MM-DD (the `captured_for` day for a batch). */
@@ -148,7 +166,12 @@ export async function ingestCandidatesForTenant(
   // discount signal do we stream the Land Registry comps; if that data is not
   // present (the M3 hosting follow-up), scoring is skipped and ingestion proceeds.
   const threshold = resolveDiscountThreshold(opts);
-  const scoring = await maybeBuildOnMarketScoring(candidates);
+  const hpiFactor = resolveHpiFactor(opts);
+  const scoring = await maybeBuildOnMarketScoring(candidates, hpiFactor);
+  // Off-market negotiability fusion (M3, AC-06): built lazily + fail-soft, on the
+  // same data gate as the discount scorer. Fuses a propensity score onto on-market
+  // listings even at full asking price.
+  const propensity = await maybeBuildPropensityScoring(candidates, hpiFactor);
 
   for (const raw of candidates) {
     try {
@@ -200,6 +223,14 @@ export async function ingestCandidatesForTenant(
         }
       }
 
+      // Fuse the off-market negotiability score (M3): fires for every on-market
+      // listing including full-asking ones, independent of the discount pass, and
+      // is merged onto (never replaces) the radar so the discount headline stays.
+      if (propensity && propensity.needs(c)) {
+        const p = propensity.score(c);
+        if (p) c.radar = { ...c.radar, negotiability: p.negotiability };
+      }
+
       // Score this lead against the whole investor store; the best match rides
       // onto the row (fitPct + client column) and its full summary is stored in
       // the candidate jsonb for the review card and the approved deal.
@@ -246,7 +277,10 @@ export async function ingestCandidatesForTenant(
  * is absent (the ~multi-GB files live on Connor's Mac; the M3 hosting follow-up),
  * we log and return null - every candidate still ingests, just un-enriched.
  */
-async function maybeBuildOnMarketScoring(candidates: ScrapedCandidate[]): Promise<{
+async function maybeBuildOnMarketScoring(
+  candidates: ScrapedCandidate[],
+  hpiFactor: number
+): Promise<{
   needs: (c: ScrapedCandidate) => boolean;
   score: (c: ScrapedCandidate, threshold?: number) => { radar: ScrapedCandidate['radar']; discountEvidence: StoredCandidate['discountEvidence'] } | null;
 } | null> {
@@ -263,12 +297,53 @@ async function maybeBuildOnMarketScoring(candidates: ScrapedCandidate[]): Promis
     const { index } = await buildPatchCompIndex();
     return {
       needs: (c) => needsOnMarketScore(c, leadMarket(c)),
-      score: (c, threshold) => scoreOnMarketCandidate(c, index, threshold != null ? { threshold } : {}),
+      score: (c, threshold) =>
+        scoreOnMarketCandidate(c, index, { hpiFactor, ...(threshold != null ? { threshold } : {}) }),
     };
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn(
       '[lead-review] on-market comp data unavailable; skipping in-platform discount scoring:',
+      e instanceof Error ? e.message : e
+    );
+    return null;
+  }
+}
+
+/**
+ * Build the in-platform off-market negotiability scorer for a batch, or null when
+ * it is not needed / not available (M3, AC-06). Fuses the Deal Radar historic
+ * propensity lens onto on-market listings so a full-asking listing carries a
+ * negotiability probability with reasons. Fail-soft on the SAME data gate as the
+ * discount scorer: the propensity index streams the ~multi-GB Land Registry + EPC
+ * files (Connor's Mac; the cloud-hosting follow-up), so if that data is absent - or
+ * any source inside the build throws - we log and return null; every candidate
+ * still ingests, just without a negotiability score. Person-level (deceased-estates
+ * / PSC) sources stay behind their existing env gates in the index build.
+ */
+async function maybeBuildPropensityScoring(candidates: ScrapedCandidate[], hpiFactor: number): Promise<{
+  needs: (c: ScrapedCandidate) => boolean;
+  score: (c: ScrapedCandidate) => { negotiability: NonNullable<ScrapedCandidate['radar']>['negotiability'] } | null;
+} | null> {
+  const { needsPropensityScore, scoreOffMarketPropensity } = await import('@/server/deal-radar/off-market-score');
+
+  const anyNeeds = candidates.some((raw) => {
+    const c = normaliseCandidate(raw);
+    return needsPropensityScore(c, leadMarket(c));
+  });
+  if (!anyNeeds) return null;
+
+  try {
+    const { buildPatchPropensityIndex } = await import('@/server/deal-radar/ingest-stock');
+    const index = await buildPatchPropensityIndex();
+    return {
+      needs: (c) => needsPropensityScore(c, leadMarket(c)),
+      score: (c) => scoreOffMarketPropensity(c, index, { hpiFactor }),
+    };
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[lead-review] off-market propensity data unavailable; skipping negotiability scoring:',
       e instanceof Error ? e.message : e
     );
     return null;
