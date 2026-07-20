@@ -22,6 +22,7 @@ import {
   type NegotiabilityScore,
   type StoredCandidate,
 } from '@/lib/lead-intake';
+import { rankScorePct, signalsOf } from '@/lib/lead-rank';
 
 /**
  * Daily Deal Review inbox (M5, Stage 4).
@@ -94,6 +95,15 @@ function evidenceOf(row: LeadCandidate): DiscountEvidence | undefined {
 /** The fused off-market negotiability score (probability + reasons), if scored (M3). */
 function negotiabilityOf(row: LeadCandidate): NegotiabilityScore | undefined {
   return radarOf(row)?.negotiability;
+}
+
+/**
+ * The M4 combined rank score (0..100): fit x discount x negotiability, fail-soft.
+ * The number the inbox is ordered by - shown small under the headline so the
+ * ordering is legible ("why is this lead above that one?").
+ */
+function rankOf(row: LeadCandidate): number {
+  return rankScorePct(signalsOf({ fitPct: row.fitPct, radar: radarOf(row) }));
 }
 
 const isHttp = (u?: string): u is string => typeof u === 'string' && /^https?:\/\//.test(u);
@@ -257,11 +267,19 @@ export default function ReviewPage() {
                       )}
                     </div>
                     {badge && (
-                      <span
-                        className={`inline-flex items-baseline gap-1 text-xs font-bold px-2.5 py-1 rounded ${badge.tone}`}
-                      >
-                        <span className="text-base font-black">{badge.label}</span> {badge.sub}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={`inline-flex items-baseline gap-1 text-xs font-bold px-2.5 py-1 rounded ${badge.tone}`}
+                        >
+                          <span className="text-base font-black">{badge.label}</span> {badge.sub}
+                        </span>
+                        <span
+                          className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide"
+                          title="Combined rank: client-fit x discount x negotiability"
+                        >
+                          rank {rankOf(row)}
+                        </span>
+                      </div>
                     )}
                   </div>
 

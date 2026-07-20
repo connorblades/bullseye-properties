@@ -13,6 +13,7 @@ export * from './ingest-boundaries';
 export * from './deal-radar-score';
 export * from './ingest-auction';
 export * from './publish-patch-index';
+export * from './daily-review-digest';
 // future:
 // export * from './send-share-link';
 // export * from './refresh-public-data';
