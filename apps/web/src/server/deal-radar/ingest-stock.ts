@@ -40,7 +40,6 @@ import {
 import {
   fetchGazetteInsolvency,
   indexGazetteEvents,
-  normalisePostcodeKey,
   fetchPsc,
   buildPscPortfolio,
   type GazetteInsolvencyEvent,
@@ -50,11 +49,15 @@ import {
 } from './distress-sources';
 import {
   buildAreaWeightTable,
-  areaMultiplierFor,
-  isEmptyHomesHotspot,
   type AreaWeightTable,
   type TaxbaseRow,
 } from './area-weights';
+import {
+  resolveDoorSignals,
+  type DoorSignalTables,
+  type ResolvedGazette,
+  type ResolvedOwnerSignals,
+} from './patch-index-serialization';
 import type { ScrapedCandidate } from '@/lib/lead-intake';
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -295,6 +298,14 @@ export type PatchPropensityIndex = {
   dwellingByJoin: Map<string, Dwelling>;
   ppsqftFor: (district: string, ptype: PropertyType) => number | undefined;
   signalsForDoor: (door: DoorRef) => DoorSignals;
+  /**
+   * The flat keyed signal tables `signalsForDoor` resolves over (M5). Exposed so the
+   * index can be serialised to a published artifact and rehydrated in the cloud with
+   * scores identical to this in-memory build (AC-09). `signalsForDoor` here is a thin
+   * wrapper over `resolveDoorSignals(tables, door)`, the same resolver the rehydrated
+   * index uses.
+   */
+  tables: DoorSignalTables;
   stats: PatchIndexStats;
 };
 
@@ -625,13 +636,15 @@ export async function buildPatchPropensityIndex(
     log(`PSC: ${pscLookups} lookups over distressed owners; portfolio rollup built.`);
   }
 
-  // Per-door signal accessor: OR the Companies House distress flags across every
-  // company at the door, resolve the strongest Gazette/PSC-portfolio signal, and
-  // join the churn/hot-street/empty-homes weight. Pure over the built maps, so the
-  // stock lens (below) and the on-market fusion (off-market-score.ts) assemble the
-  // identical signal set for any door.
-  const signalsForDoor = (door: DoorRef): DoorSignals => {
-    const owner = ownerByKey.get(`${door.postcode}|${door.paonNum}`);
+  // Collapse the per-door signal graph into flat keyed tables ONCE (the M5
+  // serialisation seam). The Companies House distress flags are OR'd across every
+  // company at each owned door, the strongest Gazette/PSC-portfolio signal resolved,
+  // and the churn / hot-street / empty-homes tables kept as-is. `resolveDoorSignals`
+  // (patch-index-serialization.ts) then reads these tables identically whether the
+  // index is live (here) or rehydrated from a published artifact in the cloud, so a
+  // door scores the same in memory and after a round-trip (AC-09).
+  const ownerSignalsByKey = new Map<string, ResolvedOwnerSignals>();
+  for (const [key, owner] of ownerByKey) {
     let insolvent = false;
     let strikeOff = false;
     let accountsOverdue = false;
@@ -644,59 +657,32 @@ export async function buildPatchPropensityIndex(
     let pscControlsDistressed = 0;
     let pscName: string | undefined;
     let gazetteByCompany: GazetteInsolvencyEvent | undefined;
-    if (owner) {
-      for (const cono of owner.companyNumbers) {
-        const f = chByCompany.get(cono);
-        if (!f) continue;
-        insolvent ||= f.insolvent;
-        strikeOff ||= f.strikeOff;
-        accountsOverdue ||= f.accountsOverdue;
-        confstmtOverdue ||= f.confstmtOverdue;
-        dormant ||= f.dormant;
-        hasCharges ||= f.hasCharges;
-        propertySic ||= f.propertySic;
-        if (f.insolvent && !ownerStatus) ownerStatus = f.status;
-        // PSC portfolio-distress rollup (approach-target name kept as metadata).
-        const port = pscPortfolio.get(cono);
-        if (port && port.controlsDistressed > pscControlsDistressed) {
-          pscControlsDistressed = port.controlsDistressed;
-          pscName = port.pscName ?? pscNameByCompany.get(cono) ?? pscName;
-        } else if (!pscName) {
-          pscName = pscNameByCompany.get(cono) ?? pscName;
-        }
-        // Gazette forced-sale notice matched by company_number (strongest join).
-        const ev = gazetteIndex.byCompany.get(cono);
-        if (ev) gazetteByCompany = ev;
+    for (const cono of owner.companyNumbers) {
+      const f = chByCompany.get(cono);
+      if (!f) continue;
+      insolvent ||= f.insolvent;
+      strikeOff ||= f.strikeOff;
+      accountsOverdue ||= f.accountsOverdue;
+      confstmtOverdue ||= f.confstmtOverdue;
+      dormant ||= f.dormant;
+      hasCharges ||= f.hasCharges;
+      propertySic ||= f.propertySic;
+      if (f.insolvent && !ownerStatus) ownerStatus = f.status;
+      // PSC portfolio-distress rollup (approach-target name kept as metadata).
+      const port = pscPortfolio.get(cono);
+      if (port && port.controlsDistressed > pscControlsDistressed) {
+        pscControlsDistressed = port.controlsDistressed;
+        pscName = port.pscName ?? pscNameByCompany.get(cono) ?? pscName;
+      } else if (!pscName) {
+        pscName = pscNameByCompany.get(cono) ?? pscName;
       }
+      // Gazette forced-sale notice matched by company_number (strongest join).
+      const ev = gazetteIndex.byCompany.get(cono);
+      if (ev) gazetteByCompany = ev;
     }
-
-    // M10 Gazette: prefer the company_number match; else an exact-postcode notice
-    // (a specific door, not a whole district - the district would over-fire).
-    const gazetteEvent = gazetteByCompany ?? gazetteIndex.byPostcode.get(normalisePostcodeKey(door.postcode));
-
-    // M10 area weight: Council Taxbase empty-homes premium for this LA (known only
-    // for doors that appear in the EPC data; a listing off-EPC gets the neutral 1).
-    const areaMultiplier = door.localAuthority ? areaMultiplierFor(areaWeights, door.localAuthority) : 1;
-    const areaHotspot = door.localAuthority ? isEmptyHomesHotspot(areaWeights, door.localAuthority) : false;
-
-    // Hot street: strongest matching street at this postcode (address contains it).
-    let streetDisc: number | undefined;
-    const hots = hotByPostcode.get(door.postcode);
-    if (hots) {
-      for (const h of hots) {
-        if (h.street && door.address.includes(h.street)) streetDisc = Math.max(streetDisc ?? 0, h.pctDisc);
-      }
-    }
-
-    const churn = churnByKey.get(`${door.postcode}|${door.paonNum}`);
-
-    return {
-      companyOwned: !!owner,
-      isOverseas: owner?.isOverseas,
+    ownerSignalsByKey.set(key, {
+      isOverseas: owner.isOverseas,
       propertySic,
-      churned: churn?.churned,
-      resoldLoss: churn?.resoldLoss,
-      streetDisc,
       insolvent,
       strikeOff,
       accountsOverdue,
@@ -704,16 +690,32 @@ export async function buildPatchPropensityIndex(
       dormant,
       hasCharges,
       ownerStatus,
-      // M10 distress-signal enrichment.
-      gazetteEvent: gazetteEvent ? true : undefined,
-      gazetteNoticeType: gazetteEvent?.noticeType,
-      gazetteDaysSince: gazetteEvent?.daysSinceEvent,
       pscControlsDistressed: pscControlsDistressed || undefined,
       pscName,
-      areaMultiplier: areaMultiplier !== 1 ? areaMultiplier : undefined,
-      areaHotspot: areaHotspot || undefined,
-    };
+      gazetteByCompany: gazetteByCompany
+        ? { noticeType: gazetteByCompany.noticeType, daysSinceEvent: gazetteByCompany.daysSinceEvent }
+        : undefined,
+    });
+  }
+
+  // Exact-postcode Gazette notices (the fallback when no company_number matches).
+  const gazetteByPostcode = new Map<string, ResolvedGazette>();
+  for (const [k, ev] of gazetteIndex.byPostcode) {
+    gazetteByPostcode.set(k, { noticeType: ev.noticeType, daysSinceEvent: ev.daysSinceEvent });
+  }
+
+  const tables: DoorSignalTables = {
+    ownerSignalsByKey,
+    churnByKey,
+    hotByPostcode,
+    gazetteByPostcode,
+    areaWeights,
   };
+
+  // Live per-door accessor: the on-market fusion (off-market-score.ts) and the stock
+  // lens (below) both go through the shared resolver, so the live index and a
+  // rehydrated one resolve any door identically.
+  const signalsForDoor = (door: DoorRef): DoorSignals => resolveDoorSignals(tables, door);
 
   return {
     model,
@@ -722,6 +724,7 @@ export async function buildPatchPropensityIndex(
     dwellingByJoin,
     ppsqftFor,
     signalsForDoor,
+    tables,
     stats: {
       transactions: txns.length,
       companiesMatched: chByCompany.size,

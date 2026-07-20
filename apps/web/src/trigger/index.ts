@@ -12,6 +12,7 @@ export * from './ingest-broadband';
 export * from './ingest-boundaries';
 export * from './deal-radar-score';
 export * from './ingest-auction';
+export * from './publish-patch-index';
 // future:
 // export * from './send-share-link';
 // export * from './refresh-public-data';
