@@ -293,8 +293,10 @@ async function maybeBuildOnMarketScoring(
   if (!anyNeeds) return null;
 
   try {
-    const { buildPatchCompIndex } = await import('@/server/deal-radar/ingest-auction');
-    const { index } = await buildPatchCompIndex();
+    // M5: the published index artifact in the cloud, or a local streaming build in
+    // dev (RDR_DATA_DIR). Throws when neither is available -> caught below, fail-soft.
+    const { loadCompIndex } = await import('@/server/deal-radar/patch-index-store');
+    const index = await loadCompIndex();
     return {
       needs: (c) => needsOnMarketScore(c, leadMarket(c)),
       score: (c, threshold) =>
@@ -334,8 +336,10 @@ async function maybeBuildPropensityScoring(candidates: ScrapedCandidate[], hpiFa
   if (!anyNeeds) return null;
 
   try {
-    const { buildPatchPropensityIndex } = await import('@/server/deal-radar/ingest-stock');
-    const index = await buildPatchPropensityIndex();
+    // M5: the published index artifact in the cloud, or a local streaming build in
+    // dev (RDR_DATA_DIR). Throws when neither is available -> caught below, fail-soft.
+    const { loadPropensityIndex } = await import('@/server/deal-radar/patch-index-store');
+    const index = await loadPropensityIndex();
     return {
       needs: (c) => needsPropensityScore(c, leadMarket(c)),
       score: (c) => scoreOffMarketPropensity(c, index, { hpiFactor }),
