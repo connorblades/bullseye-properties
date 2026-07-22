@@ -35,6 +35,7 @@ import {
   type LeadMatchSummary,
 } from '@/lib/lead-intake';
 import { matchCandidateToClients, summariseMatch } from '@/lib/investor-match';
+import { compareByCombinedScore } from '@/lib/lead-rank';
 
 export type IngestSummary = {
   /** New physical doors inserted as pending candidates. */
@@ -355,9 +356,13 @@ async function maybeBuildPropensityScoring(candidates: ScrapedCandidate[], hpiFa
 }
 
 /**
- * List the tenant's pending lead candidates, best-fit first. Ties break on the
- * radar discount confidence (higher = a stronger below-market signal) so the
- * most promising leads float to the top of the review queue.
+ * List the tenant's pending lead candidates, ordered by the M4 combined rank
+ * (discount x negotiability x client-fit, fail-soft) so the strongest, best-matched
+ * opportunities float to the top of the review queue (AC-07).
+ *
+ * SQL fetches the rows with fitPct/createdAt as a stable coarse pre-order (SQL can't
+ * index into the nested `candidate.radar` jsonb), then the combined score - which
+ * folds fitPct with the jsonb discount + negotiability signals - is applied in JS.
  */
 export async function listPendingCandidates() {
   const { tenantId } = await requireTenant();
@@ -367,21 +372,12 @@ export async function listPendingCandidates() {
     .where(and(eq(leadCandidates.tenantId, tenantId), eq(leadCandidates.status, 'pending')))
     .orderBy(desc(leadCandidates.fitPct), desc(leadCandidates.createdAt));
 
-  // fitPct is the primary sort in SQL; discountConfidence is a nested jsonb
-  // value so break ties on it here (SQL can't index into candidate.radar).
-  return rows.sort((a, b) => {
-    const fitA = a.fitPct ?? 0;
-    const fitB = b.fitPct ?? 0;
-    if (fitB !== fitA) return fitB - fitA;
-    return confidenceOf(b) - confidenceOf(a);
-  });
-}
-
-/** Pull radar.discountConfidence out of a stored candidate row (0 when absent). */
-function confidenceOf(row: { candidate: unknown }): number {
-  const cand = row.candidate as ScrapedCandidate | undefined;
-  const conf = cand?.radar?.discountConfidence;
-  return typeof conf === 'number' && Number.isFinite(conf) ? conf : 0;
+  return rows.sort((a, b) =>
+    compareByCombinedScore(
+      { fitPct: a.fitPct, radar: (a.candidate as ScrapedCandidate | undefined)?.radar },
+      { fitPct: b.fitPct, radar: (b.candidate as ScrapedCandidate | undefined)?.radar }
+    )
+  );
 }
 
 /**
