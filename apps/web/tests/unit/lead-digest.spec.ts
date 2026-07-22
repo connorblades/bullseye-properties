@@ -135,4 +135,16 @@ describe('buildDigestEmail', () => {
     });
     expect(email.text).toContain('Unmatched');
   });
+
+  it('uses no em or en dash anywhere in the rendered email (house style)', () => {
+    const email = buildDigestEmail({
+      ...base,
+      leads: [digestLead(), digestLead({ address: '5 Oak Way', rankPct: 40 })],
+      totalPending: 9,
+    });
+    const dash = /[–—]/;
+    expect(dash.test(email.subject)).toBe(false);
+    expect(dash.test(email.text)).toBe(false);
+    expect(dash.test(email.html)).toBe(false);
+  });
 });
