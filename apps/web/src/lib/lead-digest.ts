@@ -148,7 +148,7 @@ export function buildDigestEmail(input: DigestInput): BuiltEmail {
 
   // ── Plain text ──
   const textLeads = input.leads.map((lead, i) => {
-    const head = `${i + 1}. ${lead.address}${lead.postcode ? `, ${lead.postcode}` : ''} — rank ${lead.rankPct}`;
+    const head = `${i + 1}. ${lead.address}${lead.postcode ? `, ${lead.postcode}` : ''} - rank ${lead.rankPct}`;
     const sub = `   ${leadSummaryParts(lead).join(' · ')} · ${lead.market} · ${lead.source}`;
     const link = lead.listingUrl ? `\n   Listing: ${lead.listingUrl}` : '';
     return `${head}\n${sub}${link}`;

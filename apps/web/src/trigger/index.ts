@@ -14,6 +14,7 @@ export * from './deal-radar-score';
 export * from './ingest-auction';
 export * from './publish-patch-index';
 export * from './daily-review-digest';
+export * from './send-digest-now';
 // future:
 // export * from './send-share-link';
 // export * from './refresh-public-data';
