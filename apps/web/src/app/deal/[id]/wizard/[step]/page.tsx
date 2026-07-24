@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import { WizardShell } from '@/components/wizard-shell';
 import { ImageUpload } from '@/components/image-upload';
@@ -481,10 +481,19 @@ function RatingChips({ value, onChange }: { value: StageRating; onChange: (v: St
   );
 }
 
+const VIEWING_TABS = ['pre', 'on', 'inspect', 'post'] as const;
+type ViewingTab = (typeof VIEWING_TABS)[number];
+
 function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   const v = deal.viewing;
   const checklist = v.checklist ?? defaultViewingChecklist();
-  const phase = v.phase ?? 'on';
+  // Deep-link support (P3-M2): open the tab named by ?tab= (from a pipeline-board
+  // viewing card), else the partner's last-used phase, else the During checklist.
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get('tab');
+  const initialPhase: ViewingTab =
+    urlTab && (VIEWING_TABS as readonly string[]).includes(urlTab) ? (urlTab as ViewingTab) : (v.phase ?? 'on');
+  const [phase, setPhase] = useState<ViewingTab>(initialPhase);
   const [signName, setSignName] = useState('');
   const [attendee, setAttendee] = useState('');
 
@@ -561,7 +570,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
           return (
             <button
               key={p.key}
-              onClick={() => set('phase', p.key)}
+              onClick={() => { setPhase(p.key); set('phase', p.key); }}
               className={`flex-1 rounded-lg px-3 py-2 text-left transition ${active ? 'bg-navy text-white' : 'hover:bg-bg text-ink-mid'}`}
             >
               <div className="text-sm font-bold">{p.label}</div>
