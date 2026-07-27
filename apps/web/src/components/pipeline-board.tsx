@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Loader2, Plus } from 'lucide-react';
 import { listDeals, type Deal } from '@/lib/deal-store';
 import { updateDealById } from '@/server/actions/deals';
-import { PIPELINE_COLUMNS, effectivePipelineStage, type PipelineColumnKey } from '@/lib/pipeline';
+import { PIPELINE_COLUMNS, effectivePipelineStage, viewingSubState, viewingSubStateMeta, type PipelineColumnKey } from '@/lib/pipeline';
 import { scoreLeadFit } from '@/lib/lead-score';
 import { SECTIONS } from '@/lib/sections';
 
@@ -122,6 +122,10 @@ export function PipelineBoard() {
                 {items.map((d) => {
                   const fit = scoreLeadFit(d);
                   const fitTone = fit.pct >= 75 ? 'text-success bg-success-light' : fit.pct >= 50 ? 'text-amber-700 bg-amber-50' : 'text-red-600 bg-red-50';
+                  const sub = col.key === 'viewing' ? viewingSubState(d) : null;
+                  const href = sub
+                    ? `/deal/${d.id}/wizard/8?tab=${viewingSubStateMeta(sub).tab}`
+                    : d.delivered ? `/deal/${d.id}/wizard/15` : `/deal/${d.id}/wizard/${d.progress}`;
                   return (
                   <div
                     key={d.id}
@@ -132,7 +136,7 @@ export function PipelineBoard() {
                   >
                     <Link
                       draggable={false}
-                      href={d.delivered ? `/deal/${d.id}/wizard/15` : `/deal/${d.id}/wizard/${d.progress}`}
+                      href={href}
                       className="block hover:opacity-80 transition"
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
@@ -149,6 +153,13 @@ export function PipelineBoard() {
                         )}
                       </div>
                       <div className="text-xs text-ink-mid mb-3">For {d.client || '(no client yet)'}</div>
+                      {sub && (
+                        <div className="mb-3">
+                          <span className="inline-block text-[10px] font-bold text-navy bg-navy/[0.08] px-2 py-0.5 rounded uppercase tracking-wide">
+                            {viewingSubStateMeta(sub).label}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-[11px] text-ink-muted font-semibold uppercase tracking-wide">
                           {stageLabel(d)}
