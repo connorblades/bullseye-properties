@@ -35,6 +35,10 @@ import { fetchLandOwnership } from '@/server/public-data/land-ownership';
 import { fetchBroadband } from '@/server/public-data/broadband';
 import { fetchBoundary } from '@/server/public-data/boundaries';
 import { fetchEpc } from '@/server/public-data/epc';
+import { fetchNhs } from '@/server/public-data/nhs';
+import { fetchGeology } from '@/server/public-data/geology';
+import { fetchLabourMarket } from '@/server/public-data/labour-market';
+import { fetchFloodHistory } from '@/server/public-data/flood-history';
 import { lookupCompany } from '@/server/public-data/companies';
 import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
 import type { VendorCompany } from '@/lib/deal-store';
@@ -94,7 +98,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc, nhs, geology, labourMarket, floodHistory] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -111,6 +115,10 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchBroadband(geo.postcode),
       fetchBoundary(geo.lat, geo.lng),
       fetchEpc(geo.postcode, address),
+      fetchNhs(geo.postcode, geo.lat, geo.lng),
+      fetchGeology(geo.postcode, geo.lat, geo.lng),
+      fetchLabourMarket(geo.postcode, geo.lat, geo.lng, geo.districtCode),
+      fetchFloodHistory(geo.postcode, geo.lat, geo.lng),
     ]);
 
   const demographics: Demographics = {
@@ -154,6 +162,10 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     broadband: status(broadband),
     boundary: status(boundary),
     epc: status(epc),
+    nhs: status(nhs),
+    geology: status(geology),
+    labourMarket: status(labourMarket),
+    floodHistory: status(floodHistory),
     maps: hasMaps ? 'ok' : 'unavailable',
   };
 
@@ -178,6 +190,10 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(broadband ? { broadband } : {}),
     ...(boundary ? { boundary } : {}),
     ...(epc ? { epc } : {}),
+    ...(nhs ? { nhs } : {}),
+    ...(geology ? { geology } : {}),
+    ...(labourMarket ? { labourMarket } : {}),
+    ...(floodHistory ? { floodHistory } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,
   };

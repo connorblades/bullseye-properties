@@ -794,6 +794,100 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
           </View>
         </Card>
       ) : null}
+
+      {/* Local jobs market (ONS NOMIS, LA scale) */}
+      {pub?.labourMarket ? (
+        <Card style={{ marginTop: 10 }}>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 8 }}>
+            Local jobs market
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            <Stat
+              label={`Claimant count (${pub.labourMarket.claimantPeriod})`}
+              value={
+                pub.labourMarket.claimantCount.toLocaleString('en-GB') +
+                (pub.labourMarket.claimantRate != null ? ` · ${pub.labourMarket.claimantRate.toFixed(1)}%` : '')
+              }
+              width="32%"
+            />
+            {pub.labourMarket.medianWeeklyPayGross != null ? (
+              <Stat label="Median FT pay (weekly)" value={`£${Math.round(pub.labourMarket.medianWeeklyPayGross).toLocaleString('en-GB')}`} width="32%" />
+            ) : null}
+            {pub.labourMarket.economicActivityRate != null ? (
+              <Stat label="Economic activity" value={`${pub.labourMarket.economicActivityRate.toFixed(1)}%`} width="32%" />
+            ) : null}
+          </View>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: C.inkMuted, marginTop: 6 }}>
+            {`${pub.labourMarket.areaName}. Source: ONS NOMIS (claimant count, ASHE, APS).`}
+          </Text>
+        </Card>
+      ) : null}
+
+      {/* Ground conditions (BGS Geology 625k) */}
+      {pub?.geology ? (
+        <Card style={{ marginTop: 10 }}>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 6 }}>
+            Ground conditions
+          </Text>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 9, fontWeight: 700, color: C.ink }}>
+            {`Bedrock: ${pub.geology.bedrockName}`}
+          </Text>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 8.5, color: C.inkMid, marginTop: 1 }}>
+            {`${pub.geology.bedrockLithology} · ${pub.geology.bedrockAge}`}
+          </Text>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 8.5, color: C.inkMid, marginTop: 2 }}>
+            {`Superficial deposit: ${pub.geology.superficialDeposit ?? 'none mapped (bedrock at or near surface)'}`}
+          </Text>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: C.inkMuted, marginTop: 6 }}>
+            {`High-level indicator only, not a ground investigation. Source: ${pub.geology.source}.`}
+          </Text>
+        </Card>
+      ) : null}
+
+      {/* Historic recorded flooding (EA Recorded Flood Outlines) */}
+      {pub?.floodHistory ? (
+        <Card style={{ marginTop: 10 }}>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 6 }}>
+            {`Historic recorded flooding (${pub.floodHistory.recordCount} within ~1km)`}
+          </Text>
+          {pub.floodHistory.events.slice(0, 6).map((e, i) => (
+            <Text key={i} style={{ fontFamily: FONTS.body, fontSize: 8.5, color: C.inkMid, marginBottom: 1 }}>
+              {`${e.year ? `${e.year} · ` : ''}${e.name}${e.source ? ` (${e.source}${e.cause ? `; ${e.cause}` : ''})` : ''}`}
+            </Text>
+          ))}
+          <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: C.inkMuted, marginTop: 6 }}>
+            Absence of a record is not proof the area has never flooded. Source: EA Recorded Flood Outlines.
+          </Text>
+        </Card>
+      ) : null}
+
+      {/* NHS facilities (nearest GP surgeries + hospitals) */}
+      {pub?.nhs && (pub.nhs.gpSurgeries.length > 0 || pub.nhs.hospitals.length > 0) ? (
+        <Card style={{ marginTop: 10 }}>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 8 }}>
+            Nearest NHS facilities
+          </Text>
+          <TableHead
+            cols={[
+              { label: 'Facility', flex: 3 },
+              { label: 'Type', flex: 2 },
+              { label: 'Distance', flex: 1, align: 'right' },
+            ]}
+          />
+          {[...pub.nhs.gpSurgeries, ...pub.nhs.hospitals].slice(0, 8).map((f, i) => (
+            <View
+              key={i}
+              style={{ flexDirection: 'row', paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: C.border }}
+            >
+              <Text style={{ flex: 3, fontFamily: FONTS.body, fontSize: 8.5, color: C.ink }}>{f.name}</Text>
+              <Text style={{ flex: 2, fontFamily: FONTS.body, fontSize: 8.5, color: C.inkMid }}>{f.type}</Text>
+              <Text style={{ flex: 1, fontFamily: FONTS.body, fontSize: 8.5, color: C.inkMid, textAlign: 'right' }}>
+                {`${f.distanceMi.toFixed(1)} mi`}
+              </Text>
+            </View>
+          ))}
+        </Card>
+      ) : null}
     </>
   );
 }

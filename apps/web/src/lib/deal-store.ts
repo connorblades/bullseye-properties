@@ -329,11 +329,63 @@ export type SchoolInfo = {
   distanceMi: number;
 };
 
+// NHS facilities: nearest GP surgeries + hospitals (open hosted ArcGIS layers).
+export type NhsFacility = {
+  name: string;
+  type: string;              // 'GP surgery' | 'GP surgery (branch)' | 'NHS hospital' | 'Independent hospital' | 'Hospital'
+  distanceMi: number;
+  address?: string;
+};
+export type NhsInfo = {
+  gpSurgeries: NhsFacility[];
+  hospitals: NhsFacility[];
+};
+
+// BGS Geology 625k: high-level bedrock + superficial ground indicator (OGL).
+// Not a site-specific ground report; paid subsidence products are not used.
+export type GeologyInfo = {
+  bedrockName: string;              // BGS rock unit, e.g. "Pennine middle coal measures formation"
+  bedrockLithology: string;         // rock composition
+  bedrockAge: string;               // geological period, e.g. "Carboniferous"
+  superficialDeposit: string | null; // e.g. "Alluvium"; null when none mapped at 625k
+  source: string;
+};
+
+// ONS NOMIS local-authority labour-market signal (claimant count is the must-have;
+// earnings + economic activity are best-effort). Keyed by the LA GSS code.
+export type LabourMarketInfo = {
+  districtCode: string;             // LA GSS code queried, e.g. "E07000171"
+  areaName: string;                 // e.g. "Bassetlaw"
+  claimantCount: number;            // persons on the claimant count (ONS-rounded to 5)
+  claimantPeriod: string;           // e.g. "June 2026"
+  claimantRate?: number;            // claimants as % of residents aged 16-64
+  medianWeeklyPayGross?: number;    // ASHE resident full-time median gross weekly pay, GBP
+  earningsPeriod?: string;          // e.g. "2025"
+  economicActivityRate?: number;    // % aged 16-64 economically active (APS)
+  economicActivityPeriod?: string;  // e.g. "Apr 2025-Mar 2026"
+};
+
+// EA Recorded Flood Outlines: historic RECORDED flooding at/near the point.
+// Complements FloodInfo (planning flood zones) and RiverLevelInfo (live stations).
+export type RecordedFloodEvent = {
+  name: string;         // EA event name, e.g. "River Ryton Worksop June 2007"
+  startDate?: string;   // ISO yyyy-mm-dd of the recorded event, when known
+  year?: number;        // calendar year of the event
+  cause?: string;       // flood_caus
+  source?: string;      // flood_src, e.g. "main river", "surface water", "sea"
+};
+export type FloodHistoryInfo = {
+  recordCount: number;          // distinct historic recorded flood events near the point
+  events: RecordedFloodEvent[]; // most recent first (deduped, capped)
+  source: string;
+};
+
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
   | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
-  | 'riverLevels' | 'landOwnership' | 'broadband' | 'boundary';
+  | 'riverLevels' | 'landOwnership' | 'broadband' | 'boundary'
+  | 'nhs' | 'geology' | 'labourMarket' | 'floodHistory';
 
 export type PublicData = {
   postcode: string;
@@ -360,6 +412,10 @@ export type PublicData = {
   broadband?: BroadbandInfo;
   boundary?: BoundaryInfo;
   rentTrend?: RentTrendInfo;
+  nhs?: NhsInfo;
+  geology?: GeologyInfo;
+  labourMarket?: LabourMarketInfo;
+  floodHistory?: FloodHistoryInfo;
 };
 
 /**

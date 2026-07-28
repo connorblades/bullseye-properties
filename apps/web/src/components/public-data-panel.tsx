@@ -5,11 +5,12 @@ import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
   PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo, LandOwnershipInfo, BroadbandInfo,
+  NhsInfo, GeologyInfo, LabourMarketInfo, FloodHistoryInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
-  GraduationCap, Building2, Wind, Waves, Wifi,
+  GraduationCap, Building2, Wind, Waves, Wifi, Stethoscope, Mountain, Briefcase,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -35,6 +36,8 @@ const SOURCE_LABEL: Record<string, string> = {
   schools: 'Schools', areaStats: 'Population & jobs', airQuality: 'Air quality',
   councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
   landOwnership: 'Land ownership', broadband: 'Broadband', boundary: 'Plot boundary',
+  nhs: 'NHS facilities', geology: 'Geology (BGS)', labourMarket: 'Jobs market',
+  floodHistory: 'Flood history',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -400,6 +403,110 @@ export function SchoolsCard({ schools }: { schools: SchoolInfo[] }) {
   );
 }
 
+export function GeologyCard({ geology }: { geology: GeologyInfo }) {
+  const coal = /coal/i.test(geology.bedrockLithology) || /coal/i.test(geology.bedrockName);
+  const soft = geology.superficialDeposit != null && /alluvium|peat/i.test(geology.superficialDeposit);
+  return (
+    <Card icon={<Mountain size={15} className="text-navy" />} title="Ground & geology (BGS)">
+      <div className="text-sm font-bold text-ink">{geology.bedrockName}</div>
+      <div className="text-xs text-ink-mid">{geology.bedrockLithology} · {geology.bedrockAge}</div>
+      <div className="text-xs text-ink-mid mt-1">
+        Superficial deposit: {geology.superficialDeposit ?? 'none mapped (bedrock at/near surface)'}
+      </div>
+      {(coal || soft) && (
+        <div className="text-[10px] text-amber-700 bg-amber-50 rounded px-2 py-1 mt-2">
+          {coal ? 'Coal measures present - historic mining / subsidence context worth checking. ' : ''}
+          {soft ? 'Compressible ground (alluvium / peat) indicated.' : ''}
+        </div>
+      )}
+      <p className="text-[10px] text-ink-muted mt-2">High-level indicator only. Source: {geology.source}.</p>
+    </Card>
+  );
+}
+
+export function LabourMarketCard({ lm }: { lm: LabourMarketInfo }) {
+  return (
+    <Card icon={<Briefcase size={15} className="text-navy" />} title="Local jobs market (ONS)">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Claimant count</div>
+          <div className="text-sm font-bold text-ink">
+            {lm.claimantCount.toLocaleString('en-GB')}
+            {lm.claimantRate != null ? <span className="text-ink-mid font-normal"> · {lm.claimantRate.toFixed(1)}%</span> : null}
+          </div>
+          <div className="text-[10px] text-ink-muted">{lm.areaName} · {lm.claimantPeriod}</div>
+        </div>
+        {lm.medianWeeklyPayGross != null && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-ink-muted">Median FT pay</div>
+            <div className="text-sm font-bold text-ink">{fmtGBP(lm.medianWeeklyPayGross)}/wk</div>
+            <div className="text-[10px] text-ink-muted">{lm.earningsPeriod}</div>
+          </div>
+        )}
+        {lm.economicActivityRate != null && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-ink-muted">Economic activity</div>
+            <div className="text-sm text-ink">{lm.economicActivityRate.toFixed(1)}%</div>
+          </div>
+        )}
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">Source: ONS NOMIS (claimant count, ASHE, APS).</p>
+    </Card>
+  );
+}
+
+export function FloodHistoryCard({ fh }: { fh: FloodHistoryInfo }) {
+  return (
+    <Card icon={<History size={15} className="text-navy" />} title="Historic flooding (EA)">
+      <div className="text-sm font-bold text-ink">
+        {fh.recordCount} recorded flood {fh.recordCount === 1 ? 'event' : 'events'} within ~1km
+      </div>
+      <div className="space-y-1 mt-1.5">
+        {fh.events.map((e, i) => (
+          <div key={i} className="text-xs text-ink-mid">
+            {e.year ? <span className="font-semibold text-ink">{e.year} · </span> : null}
+            {e.name}
+            {e.source ? <span className="text-ink-muted"> ({e.source}{e.cause ? `; ${e.cause}` : ''})</span> : null}
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">Absence of a record is not proof the area has never flooded. Source: {fh.source}.</p>
+    </Card>
+  );
+}
+
+export function NhsCard({ nhs }: { nhs: NhsInfo }) {
+  if (nhs.gpSurgeries.length === 0 && nhs.hospitals.length === 0) return null;
+  const row = (f: NhsInfo['gpSurgeries'][number], i: number) => (
+    <div key={i} className="grid grid-cols-12 items-center gap-2 text-xs">
+      <div className="col-span-7 text-ink font-semibold truncate" title={f.address ?? f.name}>{f.name}</div>
+      <div className="col-span-3 text-ink-muted truncate">{f.type}</div>
+      <div className="col-span-2 text-right text-ink-muted tabular-nums">{f.distanceMi}mi</div>
+    </div>
+  );
+  return (
+    <div className="bg-bg rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Stethoscope size={15} className="text-navy" />
+        <div className="text-xs font-bold text-ink-mid uppercase tracking-wider">NHS facilities (nearest)</div>
+      </div>
+      {nhs.gpSurgeries.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">GP surgeries</div>
+          {nhs.gpSurgeries.map(row)}
+        </div>
+      )}
+      {nhs.hospitals.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">Hospitals</div>
+          {nhs.hospitals.map(row)}
+        </div>
+      )}
+      <div className="text-[10px] text-ink-muted mt-2 italic">Straight-line distance. Source: NHS ODS (hosted).</div>
+    </div>
+  );
+}
+
 export function PlanningApplicationsCard({ apps }: { apps: PlanningApplication[] }) {
   if (apps.length === 0) {
     return (
@@ -538,7 +645,11 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
         {data.airQuality && <AirQualityCard aq={data.airQuality} />}
         {data.demographics && <DemographicsCard d={data.demographics} />}
         {data.planning && <PlanningCard planning={data.planning} />}
+        {data.labourMarket && <LabourMarketCard lm={data.labourMarket} />}
+        {data.geology && <GeologyCard geology={data.geology} />}
+        {data.floodHistory && <FloodHistoryCard fh={data.floodHistory} />}
       </div>
+      {data.nhs && <NhsCard nhs={data.nhs} />}
       {data.schools && <SchoolsCard schools={data.schools} />}
       {data.planningApplications && <PlanningApplicationsCard apps={data.planningApplications} />}
       {data.pricePaid && <PricePaidTable pp={data.pricePaid} />}
