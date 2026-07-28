@@ -39,6 +39,7 @@ import { fetchNhs } from '@/server/public-data/nhs';
 import { fetchGeology } from '@/server/public-data/geology';
 import { fetchLabourMarket } from '@/server/public-data/labour-market';
 import { fetchFloodHistory } from '@/server/public-data/flood-history';
+import { fetchTraffic } from '@/server/public-data/dft-traffic';
 import { lookupCompany } from '@/server/public-data/companies';
 import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
 import type { VendorCompany } from '@/lib/deal-store';
@@ -98,7 +99,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc, nhs, geology, labourMarket, floodHistory] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc, nhs, geology, labourMarket, floodHistory, dftTraffic] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -119,6 +120,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchGeology(geo.postcode, geo.lat, geo.lng),
       fetchLabourMarket(geo.postcode, geo.lat, geo.lng, geo.districtCode),
       fetchFloodHistory(geo.postcode, geo.lat, geo.lng),
+      fetchTraffic(geo.postcode, geo.lat, geo.lng, geo.districtCode),
     ]);
 
   const demographics: Demographics = {
@@ -166,6 +168,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     geology: status(geology),
     labourMarket: status(labourMarket),
     floodHistory: status(floodHistory),
+    dftTraffic: status(dftTraffic),
     maps: hasMaps ? 'ok' : 'unavailable',
   };
 
@@ -194,6 +197,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(geology ? { geology } : {}),
     ...(labourMarket ? { labourMarket } : {}),
     ...(floodHistory ? { floodHistory } : {}),
+    ...(dftTraffic ? { dftTraffic } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,
   };

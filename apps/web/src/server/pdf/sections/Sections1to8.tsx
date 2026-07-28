@@ -823,6 +823,23 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
         </Card>
       ) : null}
 
+      {/* Road traffic (DfT nearest count point) */}
+      {pub?.dftTraffic ? (
+        <Card style={{ marginTop: 10 }}>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 8 }}>
+            Road traffic
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            <Stat label="Daily traffic (AADF)" value={`${pub.dftTraffic.aadf.toLocaleString('en-GB')} veh/day`} width="32%" />
+            <Stat label="Nearest road" value={`${pub.dftTraffic.roadName} (${pub.dftTraffic.roadType})`} width="32%" />
+            <Stat label="Count point distance" value={`${pub.dftTraffic.distanceM} m`} width="32%" />
+          </View>
+          <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: C.inkMuted, marginTop: 6 }}>
+            {`Of which ${pub.dftTraffic.hgvs.toLocaleString('en-GB')} HGVs/day. ${pub.dftTraffic.year} survey. Source: DfT Road Traffic Statistics.`}
+          </Text>
+        </Card>
+      ) : null}
+
       {/* Ground conditions (BGS Geology 625k) */}
       {pub?.geology ? (
         <Card style={{ marginTop: 10 }}>

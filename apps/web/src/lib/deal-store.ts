@@ -380,12 +380,24 @@ export type FloodHistoryInfo = {
   source: string;
 };
 
+// DfT Road Traffic Statistics: AADF at the nearest count point (road noise /
+// footfall context). STATS19 road-safety is bulk-only and not included here.
+export type TrafficInfo = {
+  aadf: number;        // annual average daily flow, all motor vehicles, both directions
+  year: number;        // survey year of the nearest count point
+  roadName: string;    // e.g. "A630" ("U"/"C" expanded for display)
+  roadType: string;    // "Major" (motorway / A-road) | "Minor"
+  distanceM: number;   // straight-line distance property -> count point, metres
+  hgvs: number;        // all-HGV component of the AADF (both directions)
+  source: string;
+};
+
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
   | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
   | 'riverLevels' | 'landOwnership' | 'broadband' | 'boundary'
-  | 'nhs' | 'geology' | 'labourMarket' | 'floodHistory';
+  | 'nhs' | 'geology' | 'labourMarket' | 'floodHistory' | 'dftTraffic';
 
 export type PublicData = {
   postcode: string;
@@ -416,6 +428,7 @@ export type PublicData = {
   geology?: GeologyInfo;
   labourMarket?: LabourMarketInfo;
   floodHistory?: FloodHistoryInfo;
+  dftTraffic?: TrafficInfo;
 };
 
 /**
