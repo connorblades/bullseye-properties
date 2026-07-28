@@ -392,12 +392,25 @@ export type TrafficInfo = {
   source: string;
 };
 
+// Ofcom Connected Nations mobile 4G/5G coverage at the local authority (the free
+// bulk data is aggregated to LA, not postcode; keyed by districtCode/laua GSS).
+// Percentages are of PREMISES: "Pct" = at least one of the four MNOs, "AllPct" = all four.
+export type MobileCoverageInfo = {
+  areaName?: string;            // local authority name (e.g. "Bassetlaw")
+  fourGIndoorPct?: number;      // % premises with indoor 4G from >= 1 operator
+  fourGIndoorAllPct?: number;   // % premises with indoor 4G from all 4 operators
+  fourGOutdoorPct?: number;     // % premises with outdoor 4G from >= 1 operator
+  fiveGOutdoorPct?: number;     // % premises with outdoor 5G (high confidence) from >= 1 operator
+  fiveGOutdoorAllPct?: number;  // % premises with outdoor 5G (high confidence) from all 4 operators
+  source: string;
+};
+
 export type PublicDataSourceKey =
   | 'geocode' | 'demographics' | 'hpi' | 'crime' | 'flood'
   | 'amenities' | 'pricePaid' | 'planning' | 'planningApplications'
   | 'schools' | 'areaStats' | 'airQuality' | 'councilTax' | 'epc' | 'maps'
   | 'riverLevels' | 'landOwnership' | 'broadband' | 'boundary'
-  | 'nhs' | 'geology' | 'labourMarket' | 'floodHistory' | 'dftTraffic';
+  | 'nhs' | 'geology' | 'labourMarket' | 'floodHistory' | 'dftTraffic' | 'mobileCoverage';
 
 export type PublicData = {
   postcode: string;
@@ -429,6 +442,7 @@ export type PublicData = {
   labourMarket?: LabourMarketInfo;
   floodHistory?: FloodHistoryInfo;
   dftTraffic?: TrafficInfo;
+  mobileCoverage?: MobileCoverageInfo;
 };
 
 /**
