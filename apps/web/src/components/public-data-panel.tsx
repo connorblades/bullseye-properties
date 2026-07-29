@@ -5,12 +5,12 @@ import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
   PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo, LandOwnershipInfo, BroadbandInfo,
-  NhsInfo, GeologyInfo, LabourMarketInfo, FloodHistoryInfo, TrafficInfo,
+  NhsInfo, GeologyInfo, LabourMarketInfo, FloodHistoryInfo, TrafficInfo, MobileCoverageInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
-  GraduationCap, Building2, Wind, Waves, Wifi, Stethoscope, Mountain, Briefcase, Car,
+  GraduationCap, Building2, Wind, Waves, Wifi, Stethoscope, Mountain, Briefcase, Car, Signal,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -37,7 +37,7 @@ const SOURCE_LABEL: Record<string, string> = {
   councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
   landOwnership: 'Land ownership', broadband: 'Broadband', boundary: 'Plot boundary',
   nhs: 'NHS facilities', geology: 'Geology (BGS)', labourMarket: 'Jobs market',
-  floodHistory: 'Flood history', dftTraffic: 'Traffic',
+  floodHistory: 'Flood history', dftTraffic: 'Traffic', mobileCoverage: 'Mobile coverage',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -475,6 +475,30 @@ export function FloodHistoryCard({ fh }: { fh: FloodHistoryInfo }) {
   );
 }
 
+export function MobileCoverageCard({ mob }: { mob: MobileCoverageInfo }) {
+  const pct = (v?: number) => (v == null ? '—' : `${v.toFixed(0)}%`);
+  const lowIndoor = mob.fourGIndoorPct != null && mob.fourGIndoorPct < 95;
+  return (
+    <Card icon={<Signal size={15} className="text-navy" />} title="Mobile coverage (Ofcom)">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">4G indoor</div>
+          <div className={`text-sm font-bold ${lowIndoor ? 'text-amber-700' : 'text-ink'}`}>{pct(mob.fourGIndoorPct)}</div>
+          <div className="text-[10px] text-ink-muted">all four: {pct(mob.fourGIndoorAllPct)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-muted">5G outdoor</div>
+          <div className="text-sm font-bold text-ink">{pct(mob.fiveGOutdoorPct)}</div>
+          <div className="text-[10px] text-ink-muted">all four: {pct(mob.fiveGOutdoorAllPct)}</div>
+        </div>
+      </div>
+      <p className="text-[10px] text-ink-muted mt-2">
+        {mob.areaName ? `${mob.areaName} local authority. ` : ''}Area-level, % of premises. Source: {mob.source}.
+      </p>
+    </Card>
+  );
+}
+
 export function TrafficCard({ traffic }: { traffic: TrafficInfo }) {
   return (
     <Card icon={<Car size={15} className="text-navy" />} title="Road traffic (DfT)">
@@ -666,6 +690,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
         {data.geology && <GeologyCard geology={data.geology} />}
         {data.floodHistory && <FloodHistoryCard fh={data.floodHistory} />}
         {data.dftTraffic && <TrafficCard traffic={data.dftTraffic} />}
+        {data.mobileCoverage && <MobileCoverageCard mob={data.mobileCoverage} />}
       </div>
       {data.nhs && <NhsCard nhs={data.nhs} />}
       {data.schools && <SchoolsCard schools={data.schools} />}

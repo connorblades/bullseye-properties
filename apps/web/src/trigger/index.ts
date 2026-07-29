@@ -9,6 +9,7 @@ export * from './hello-world';
 export * from './generate-report';
 export * from './ingest-land-data';
 export * from './ingest-broadband';
+export * from './ingest-mobile-coverage';
 export * from './ingest-boundaries';
 export * from './deal-radar-score';
 export * from './ingest-auction';

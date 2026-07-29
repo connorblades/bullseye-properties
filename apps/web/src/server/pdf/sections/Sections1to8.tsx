@@ -766,7 +766,7 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
       ) : null}
 
       {/* Title & connectivity (Report v2: more characteristics) */}
-      {(pub?.landOwnership?.titles?.length ?? 0) > 0 || pub?.broadband ? (
+      {(pub?.landOwnership?.titles?.length ?? 0) > 0 || pub?.broadband || pub?.mobileCoverage ? (
         <Card>
           <Text style={{ fontFamily: FONTS.body, fontSize: 10, fontWeight: 700, color: C.ink, marginBottom: 8 }}>
             Title and connectivity
@@ -791,7 +791,18 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
             {pub?.broadband?.superfastPct != null ? (
               <Stat label="Superfast availability" value={`${pub.broadband.superfastPct}%`} width="32%" />
             ) : null}
+            {pub?.mobileCoverage?.fourGIndoorPct != null ? (
+              <Stat label="4G indoor coverage" value={`${pub.mobileCoverage.fourGIndoorPct}%`} width="32%" tone={Number(pub.mobileCoverage.fourGIndoorPct) >= 95 ? 'good' : 'neutral'} />
+            ) : null}
+            {pub?.mobileCoverage?.fiveGOutdoorPct != null ? (
+              <Stat label="5G outdoor coverage" value={`${pub.mobileCoverage.fiveGOutdoorPct}%`} width="32%" />
+            ) : null}
           </View>
+          {pub?.mobileCoverage ? (
+            <Text style={{ fontFamily: FONTS.body, fontSize: 7.5, color: C.inkMuted, marginTop: 6 }}>
+              {`Mobile coverage is area-level (${pub.mobileCoverage.areaName ?? 'local authority'}), % of premises. Source: Ofcom Connected Nations.`}
+            </Text>
+          ) : null}
         </Card>
       ) : null}
 

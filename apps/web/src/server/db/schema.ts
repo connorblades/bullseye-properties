@@ -306,6 +306,19 @@ export const broadbandCoverage = pgTable(
   })
 );
 
+// Ofcom Connected Nations mobile coverage, keyed by local-authority GSS code
+// (the free bulk data is aggregated to LA, not postcode). See migration 0012.
+export const mobileCoverage = pgTable('mobile_coverage', {
+  id: text('id').primaryKey(), // local authority GSS code (laua)
+  areaName: text('area_name'),
+  fourGIndoorPct: numeric('four_g_indoor_pct', { precision: 5, scale: 1 }),
+  fourGIndoorAllPct: numeric('four_g_indoor_all_pct', { precision: 5, scale: 1 }),
+  fourGOutdoorPct: numeric('four_g_outdoor_pct', { precision: 5, scale: 1 }),
+  fiveGOutdoorPct: numeric('five_g_outdoor_pct', { precision: 5, scale: 1 }),
+  fiveGOutdoorAllPct: numeric('five_g_outdoor_all_pct', { precision: 5, scale: 1 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Share tokens (M4) - revocable, expiring per-link tokens gating the public
 // delivery surfaces: kind 'outline' -> Report 1 (/o/[token]), kind 'report' ->

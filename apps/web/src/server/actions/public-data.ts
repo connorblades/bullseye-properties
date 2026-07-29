@@ -40,6 +40,7 @@ import { fetchGeology } from '@/server/public-data/geology';
 import { fetchLabourMarket } from '@/server/public-data/labour-market';
 import { fetchFloodHistory } from '@/server/public-data/flood-history';
 import { fetchTraffic } from '@/server/public-data/dft-traffic';
+import { fetchMobileCoverage } from '@/server/public-data/mobile-coverage';
 import { lookupCompany } from '@/server/public-data/companies';
 import { buildMapLayers, buildFloodMap } from '@/server/maps/static-maps';
 import type { VendorCompany } from '@/lib/deal-store';
@@ -99,7 +100,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
   }
 
   // Fan out. Each fetcher is already fail-soft (returns null on failure).
-  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc, nhs, geology, labourMarket, floodHistory, dftTraffic] =
+  const [hpi, crime, flood, amenities, pricePaid, planning, planningApplications, schools, areaStats, airQuality, riverLevels, landOwnership, broadband, boundary, epc, nhs, geology, labourMarket, floodHistory, dftTraffic, mobileCoverage] =
     await Promise.all([
       fetchHpi(geo.district, geo.districtCode),
       fetchCrime(geo.lat, geo.lng),
@@ -121,6 +122,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
       fetchLabourMarket(geo.postcode, geo.lat, geo.lng, geo.districtCode),
       fetchFloodHistory(geo.postcode, geo.lat, geo.lng),
       fetchTraffic(geo.postcode, geo.lat, geo.lng, geo.districtCode),
+      fetchMobileCoverage(geo.postcode, geo.districtCode),
     ]);
 
   const demographics: Demographics = {
@@ -169,6 +171,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     labourMarket: status(labourMarket),
     floodHistory: status(floodHistory),
     dftTraffic: status(dftTraffic),
+    mobileCoverage: status(mobileCoverage),
     maps: hasMaps ? 'ok' : 'unavailable',
   };
 
@@ -198,6 +201,7 @@ export async function pullPublicData(dealId: string): Promise<PullResult> {
     ...(labourMarket ? { labourMarket } : {}),
     ...(floodHistory ? { floodHistory } : {}),
     ...(dftTraffic ? { dftTraffic } : {}),
+    ...(mobileCoverage ? { mobileCoverage } : {}),
     ...(hasMaps ? { maps } : {}),
     demographics,
   };
