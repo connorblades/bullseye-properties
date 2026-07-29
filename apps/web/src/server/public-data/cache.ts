@@ -20,7 +20,7 @@ export type CacheSource =
   | 'pricePaid' | 'planning' | 'planningApplications' | 'schools'
   | 'areaStats' | 'airQuality'
   | 'councilTax' | 'epc' | 'companies' | 'deprivation' | 'maps' | 'riverLevels'
-  | 'nhs' | 'geology' | 'labourMarket' | 'floodHistory';
+  | 'nhs' | 'geology' | 'labourMarket' | 'floodHistory' | 'dftTraffic';
 
 export const TTL = {
   hour: 60 * 60 * 1000,

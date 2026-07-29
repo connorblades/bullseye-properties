@@ -5,12 +5,12 @@ import type {
   Deal, PublicData, PublicDataStatus, FloodInfo, EpcInfo,
   Demographics, CouncilTaxInfo, PlanningInfo, PricePaidInfo, HpiInfo,
   PlanningApplication, MapLayers, SchoolInfo, AreaStats, AirQualityInfo, RiverLevelInfo, LandOwnershipInfo, BroadbandInfo,
-  NhsInfo, GeologyInfo, LabourMarketInfo, FloodHistoryInfo,
+  NhsInfo, GeologyInfo, LabourMarketInfo, FloodHistoryInfo, TrafficInfo,
 } from '@/lib/deal-store';
 import {
   Droplets, Zap, Landmark, Users, Receipt, TrendingUp, History,
   CheckCircle2, XCircle, MinusCircle, Image as ImageIcon, FileStack, ExternalLink,
-  GraduationCap, Building2, Wind, Waves, Wifi, Stethoscope, Mountain, Briefcase,
+  GraduationCap, Building2, Wind, Waves, Wifi, Stethoscope, Mountain, Briefcase, Car,
 } from 'lucide-react';
 
 // MapLibre needs the browser - load the interactive map client-side only.
@@ -37,7 +37,7 @@ const SOURCE_LABEL: Record<string, string> = {
   councilTax: 'Council Tax', epc: 'EPC', maps: 'Maps', riverLevels: 'River levels',
   landOwnership: 'Land ownership', broadband: 'Broadband', boundary: 'Plot boundary',
   nhs: 'NHS facilities', geology: 'Geology (BGS)', labourMarket: 'Jobs market',
-  floodHistory: 'Flood history',
+  floodHistory: 'Flood history', dftTraffic: 'Traffic',
 };
 
 function StatusIcon({ s }: { s: PublicDataStatus }) {
@@ -475,6 +475,23 @@ export function FloodHistoryCard({ fh }: { fh: FloodHistoryInfo }) {
   );
 }
 
+export function TrafficCard({ traffic }: { traffic: TrafficInfo }) {
+  return (
+    <Card icon={<Car size={15} className="text-navy" />} title="Road traffic (DfT)">
+      <div className="text-sm font-bold text-ink">
+        {traffic.aadf.toLocaleString('en-GB')} vehicles/day
+      </div>
+      <div className="text-xs text-ink-mid">
+        {traffic.roadName} ({traffic.roadType}) · {traffic.distanceM}m away · {traffic.year} survey
+      </div>
+      {traffic.hgvs > 0 && (
+        <div className="text-xs text-ink-mid mt-1">of which {traffic.hgvs.toLocaleString('en-GB')} HGVs/day</div>
+      )}
+      <p className="text-[10px] text-ink-muted mt-2">Nearest count point. Source: {traffic.source}.</p>
+    </Card>
+  );
+}
+
 export function NhsCard({ nhs }: { nhs: NhsInfo }) {
   if (nhs.gpSurgeries.length === 0 && nhs.hospitals.length === 0) return null;
   const row = (f: NhsInfo['gpSurgeries'][number], i: number) => (
@@ -648,6 +665,7 @@ export function PublicDataPanel({ deal }: { deal: Deal }) {
         {data.labourMarket && <LabourMarketCard lm={data.labourMarket} />}
         {data.geology && <GeologyCard geology={data.geology} />}
         {data.floodHistory && <FloodHistoryCard fh={data.floodHistory} />}
+        {data.dftTraffic && <TrafficCard traffic={data.dftTraffic} />}
       </div>
       {data.nhs && <NhsCard nhs={data.nhs} />}
       {data.schools && <SchoolsCard schools={data.schools} />}
