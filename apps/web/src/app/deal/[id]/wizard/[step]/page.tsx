@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import { WizardShell } from '@/components/wizard-shell';
@@ -19,7 +19,6 @@ import { InspectionWalkthrough } from '@/components/inspection-walkthrough';
 import { LegalPackPanel } from '@/components/legal-pack-panel';
 import { inspectionReviewProgress, type InspectionState } from '@/lib/inspection';
 import { signOut } from '@/server/actions/auth';
-import { updateDealById } from '@/server/actions/deals';
 import { pullPublicData } from '@/server/actions/public-data';
 import { publishReport, getLatestDealPackUrl } from '@/server/actions/claude';
 import {
@@ -32,7 +31,6 @@ import { SECTIONS } from '@/lib/sections';
 import { fmtMoney } from '@/lib/utils';
 import {
   useDeal,
-  setStageProgress,
   computeFinancials,
   computeGrowthProjection,
   parseSoldMonth,
@@ -65,7 +63,8 @@ export default function WizardStepPage() {
   const id = params.id;
   const total = SECTIONS.length;
   const step = Math.max(1, Math.min(total, parseInt(params.step, 10)));
-  const [deal, update, { loading }] = useDeal(id);
+  const [deal, update, { loading, error, saveStatus, flush }] = useDeal(id);
+  const [navigating, setNavigating] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -89,30 +88,61 @@ export default function WizardStepPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <div className="card p-10 max-w-md text-center">
-          <h2 className="text-xl font-black text-ink mb-3">Deal not found</h2>
-          <p className="text-sm text-ink-mid mb-6">This deal could not be found. It may have been removed, or you may not have access to it.</p>
+          <h2 className="text-xl font-black text-ink mb-3">{error ? 'Could not load this deal' : 'Deal not found'}</h2>
+          <p className="text-sm text-ink-mid mb-6">{error ? 'Check your connection and try again. Your saved deal has not been removed.' : 'This deal could not be found. It may have been removed, or you may not have access to it.'}</p>
+          {error && <button onClick={() => window.location.reload()} className="btn-secondary mb-4">Try again</button>}
           <button onClick={() => router.push('/deal/new')} className="btn-primary mx-auto">Start a new deal</button>
         </div>
       </div>
     );
   }
 
-  const goNext = () => {
-    if (step < total) {
-      setStageProgress(id, Math.min(total, step + 1));
-      router.push(`/deal/${id}/wizard/${step + 1}`);
-    } else {
-      updateDealById(id, { delivered: true, progress: total });
-      router.push(`/dashboard`);
-    }
+  const saveAndNavigate = async (href: string) => {
+    if (navigating) return;
+    setNavigating(true);
+    try {
+      if (await flush()) router.push(href);
+    } finally { setNavigating(false); }
   };
-  const goBack = () => {
-    if (step > 1) router.push(`/deal/${id}/wizard/${step - 1}`);
-    else router.push('/deal/new');
+  const goNext = () => {
+    if (navigating) return;
+    update(step < total ? { progress: step + 1 } : { delivered: true, progress: total });
+    void saveAndNavigate(step < total ? `/deal/${id}/wizard/${step + 1}` : '/dashboard');
+  };
+  const goBack = () => { void saveAndNavigate(step > 1 ? `/deal/${id}/wizard/${step - 1}` : '/deal/new'); };
+  const saveBeforeLink = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+    if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+    const href = anchor.getAttribute('href');
+    if (!href || href.startsWith('#')) return;
+    const url = new URL(href, window.location.origin);
+    if (url.origin !== window.location.origin) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void saveAndNavigate(url.pathname + url.search + url.hash);
+  };
+  const saveAndSignOut = async () => {
+    if (navigating) return;
+    setNavigating(true);
+    try { if (await flush()) await signOut(); }
+    finally { setNavigating(false); }
   };
 
   return (
-    <WizardShell dealId={id} currentStep={step} signOutAction={signOut}>
+    <div onClickCapture={saveBeforeLink}>
+    <fieldset disabled={navigating} className="min-w-0">
+    <WizardShell dealId={id} currentStep={step} signOutAction={saveAndSignOut}>
+      <div role={saveStatus === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-lg border p-3 text-sm ${saveStatus === 'error' ? 'border-red-200 bg-red-50' : 'border-black/10 bg-white'}`}>
+        {saveStatus === 'saved' && 'All changes saved.'}
+        {saveStatus === 'pending' && 'Changes waiting to save…'}
+        {saveStatus === 'saving' && 'Saving changes…'}
+        {saveStatus === 'error' && <>
+          <p className="font-bold">Changes have not been saved.</p>
+          <p className="mt-1">Your edits are still on this page. Check your connection and retry before leaving or closing it.</p>
+          <button type="button" onClick={() => { void flush(); }} className="btn-secondary mt-3">Retry save</button>
+        </>}
+      </div>
       {step === 2 && <CriteriaForm deal={deal} update={update} />}
       {step === 3 && <AutoPullPanel deal={deal} update={update} />}
       {step === 4 && <PropertyForm deal={deal} update={update} />}
@@ -153,6 +183,8 @@ export default function WizardStepPage() {
         </button>
       </div>
     </WizardShell>
+    </fieldset>
+    </div>
   );
 }
 

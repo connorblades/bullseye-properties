@@ -8,7 +8,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { deals } from '@/server/db/schema';
 import { requireTenant } from '@/server/auth/tenant';
@@ -131,9 +131,9 @@ function splitDealForStorage(patch: Partial<Deal>): {
  * Patch a deal. Accepts a partial Deal — top-level fields update their
  * Postgres columns, anything else merges into the `inputs` jsonb.
  *
- * Wizard auto-save calls this on every (debounced) input change, sending
- * the full current Deal object. The merge means partial updates from
- * concurrent clients don't clobber each other's nested fields.
+ * Each patch replaces its supplied top-level input sections atomically.
+ * Concurrent changes to different sections are preserved; edits to the same
+ * section remain last-write-wins.
  */
 export async function updateDealById(dealId: string, patch: Partial<Deal>) {
   const { tenantId } = await requireTenant();
@@ -144,21 +144,16 @@ export async function updateDealById(dealId: string, patch: Partial<Deal>) {
     updatedAt: new Date(),
   };
 
-  // Only merge inputs if there's at least one nested field to update.
   if (Object.keys(jsonbInputs).length > 0) {
-    const existing = await db
-      .select({ inputs: deals.inputs })
-      .from(deals)
-      .where(and(eq(deals.id, dealId), eq(deals.tenantId, tenantId)))
-      .limit(1);
-    const existingInputs = (existing[0]?.inputs as Record<string, unknown> | undefined) ?? {};
-    updateData.inputs = { ...existingInputs, ...jsonbInputs };
+    updateData.inputs = sql`coalesce(${deals.inputs}, '{}'::jsonb) || ${JSON.stringify(jsonbInputs)}::jsonb`;
   }
 
-  await db
+  const saved = await db
     .update(deals)
     .set(updateData)
-    .where(and(eq(deals.id, dealId), eq(deals.tenantId, tenantId)));
+    .where(and(eq(deals.id, dealId), eq(deals.tenantId, tenantId), isNull(deals.deletedAt)))
+    .returning({ id: deals.id });
+  if (saved.length !== 1) throw new Error('This deal is no longer available to save.');
 
   revalidatePath(`/deal/${dealId}/wizard`);
 }

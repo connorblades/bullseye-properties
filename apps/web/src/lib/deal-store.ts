@@ -14,13 +14,14 @@
  * built-in 800ms debounce that coalesces rapid keystrokes into one save.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useSyncExternalStore } from 'react';
 import {
   listDealsForTenant,
   loadDeal,
   updateDealById,
 } from '@/server/actions/deals';
 import { emptyDeal } from './deal-factory';
+import { createSaveQueue, type SaveStatus } from './save-queue';
 import type { InspectionState } from './inspection';
 import type { LegalPackAnalysis } from './legal-pack';
 
@@ -666,16 +667,17 @@ export async function listDeals(): Promise<Deal[]> {
  * then schedules a debounced server-action write 800ms later. Coalesces
  * rapid keystrokes into one save.
  */
-export function useDeal(dealId: string): readonly [Deal | null, (patch: Partial<Deal>) => void, { loading: boolean; error: string | null }] {
+export function useDeal(dealId: string): readonly [Deal | null, (patch: Partial<Deal>) => void, { loading: boolean; error: string | null; saveStatus: SaveStatus; flush: () => Promise<boolean> }] {
   const [deal, setDeal] = useState<Deal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPatch = useRef<Partial<Deal>>({});
+  const queue = useMemo(() => createSaveQueue<Deal>((patch) => updateDealById(dealId, patch), SAVE_DEBOUNCE_MS), [dealId]);
+  const saveStatus = useSyncExternalStore(queue.subscribe, queue.getStatus, queue.getStatus);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setDeal(null);
     setError(null);
     loadDeal(dealId)
       .then((row) => {
@@ -696,38 +698,23 @@ export function useDeal(dealId: string): readonly [Deal | null, (patch: Partial<
     return () => { cancelled = true; };
   }, [dealId]);
 
-  const flush = useCallback(async () => {
-    const patch = pendingPatch.current;
-    pendingPatch.current = {};
-    if (Object.keys(patch).length === 0) return;
-    try {
-      await updateDealById(dealId, patch);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed.');
-    }
-  }, [dealId]);
+  const update = useCallback((patch: Partial<Deal>) => {
+    setDeal((prev) => (prev ? { ...prev, ...patch } : prev));
+    queue.add(patch);
+  }, [queue]);
 
-  const update = useCallback(
-    (patch: Partial<Deal>) => {
-      setDeal((prev) => (prev ? { ...prev, ...patch } : prev));
-      pendingPatch.current = { ...pendingPatch.current, ...patch };
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => { flush(); }, SAVE_DEBOUNCE_MS);
-    },
-    [flush]
-  );
-
-  // Flush any pending save when the component unmounts (route change).
   useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        flush();
-      }
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (queue.hasUnsaved()) { event.preventDefault(); event.returnValue = ''; }
     };
-  }, [flush]);
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => {
+      window.removeEventListener('beforeunload', warnBeforeLeaving);
+      void queue.flush();
+    };
+  }, [queue]);
 
-  return [deal, update, { loading, error }] as const;
+  return [deal, update, { loading, error, saveStatus, flush: queue.flush }] as const;
 }
 
 /**
