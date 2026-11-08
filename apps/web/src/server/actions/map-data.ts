@@ -9,12 +9,14 @@
 import type { GeoCollection } from '@/server/public-data/geojson';
 import { fetchCrimePoints } from '@/server/public-data/crime';
 import { fetchDeprivation } from '@/server/public-data/deprivation';
+import { requireTenant } from '@/server/auth/tenant';
 
 export async function getCrimeHeat(
   lat: number,
   lng: number,
   radiusKm = 3,
 ): Promise<GeoCollection | null> {
+  await requireTenant();
   return fetchCrimePoints(lat, lng, radiusKm);
 }
 
@@ -23,5 +25,6 @@ export async function getDeprivation(
   lng: number,
   radiusKm = 3,
 ): Promise<GeoCollection | null> {
+  await requireTenant();
   return fetchDeprivation(lat, lng, radiusKm);
 }

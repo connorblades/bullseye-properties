@@ -71,6 +71,7 @@ function inspectionHasData(ins: Deal['viewing']['inspection']): boolean {
     (s) =>
       !!s &&
       (s.rating !== undefined ||
+        !!s.result ||
         !!s.notes?.trim() ||
         !!s.reading?.trim() ||
         !!s.flagged ||

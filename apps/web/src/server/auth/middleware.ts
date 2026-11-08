@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { authConfigured } from './config';
 
 /**
  * Refresh the Supabase auth session on every request and return the current
@@ -14,7 +15,7 @@ export async function updateSession(request: NextRequest) {
   // Provisioning (M0-T2) makes these present; until then, no session refresh.
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
+  if (!authConfigured() || !url || !key) {
     return { response, user: null };
   }
 

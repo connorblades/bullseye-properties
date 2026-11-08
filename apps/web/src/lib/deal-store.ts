@@ -48,6 +48,7 @@ export type ViewingRecord = {
   outcome?: 'proceed' | 'pass' | 'undecided' | '';
   signedOffBy?: string;
   signedOffAt?: string;
+  inspection?: InspectionState;
 };
 export type MortgageType = 'cash' | 'interest-only' | 'repayment';
 

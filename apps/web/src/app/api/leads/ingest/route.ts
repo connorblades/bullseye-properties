@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { ingestCandidatesForTenant } from '@/server/actions/lead-review';
+import { ingestCandidatesForTenant } from '@/server/leads/ingest';
 import { validateCandidateBatch, FEEDER_CONTRACT_VERSION } from '@/lib/feeder-contract';
 
 /**

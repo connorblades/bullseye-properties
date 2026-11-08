@@ -41,7 +41,7 @@ export function RiskMap({ lat, lng }: { lat: number; lng: number }) {
     let cancelled = false;
     let map: MlMap | undefined;
     (async () => {
-      const maplibregl = (await import('maplibre-gl')).default;
+      const maplibregl = await import('maplibre-gl');
       if (cancelled || !containerRef.current) return;
       map = new maplibregl.Map({
         container: containerRef.current,

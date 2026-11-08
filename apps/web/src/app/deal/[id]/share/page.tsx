@@ -16,18 +16,19 @@ import { ShareLinkManager } from '@/components/share-link-manager';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Share links · Bullseye Properties' };
 
-export default async function DealSharePage({ params }: { params: { id: string } }) {
+export default async function DealSharePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const user = await requireUser();
-  const deal = await loadDeal(params.id);
+  const deal = await loadDeal(id);
   if (!deal) notFound();
-  const hasReport = await dealHasRenderedReport(params.id);
+  const hasReport = await dealHasRenderedReport(id);
 
   return (
     <div className="min-h-screen">
       <Nav userEmail={user.email ?? undefined} signOutAction={signOut} />
       <main className="max-w-3xl mx-auto px-6 py-10">
         <Link
-          href={`/deal/${params.id}/wizard/1`}
+          href={`/deal/${id}/wizard/1`}
           className="text-sm font-semibold text-ink-mid hover:text-navy inline-flex items-center gap-1.5 mb-6"
         >
           <ArrowLeft size={15} /> Back to the deal
@@ -41,13 +42,13 @@ export default async function DealSharePage({ params }: { params: { id: string }
 
         <div className="space-y-6">
           <ShareLinkManager
-            dealId={params.id}
+            dealId={id}
             kind="outline"
             title="Outline pack (Report 1)"
             description="Revocable, expiring links to the pre-viewing Outline pack. Send one per prospect so you can revoke or track each independently. The link is shown once on creation."
           />
           <ShareLinkManager
-            dealId={params.id}
+            dealId={id}
             kind="report"
             title="Full report (Report 2)"
             description="Revocable, expiring links to the full Standard Deal Report. Each link is pinned to the report version current when you create it."

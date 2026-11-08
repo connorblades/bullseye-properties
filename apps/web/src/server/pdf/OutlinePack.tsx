@@ -1,6 +1,7 @@
 import 'server-only';
 import React from 'react';
-import { Document, Page, View, Text, Image, Svg, Path } from '@react-pdf/renderer';
+import { SafeImage } from './SafeImage';
+import { Document, Page, View, Text, Svg, Path } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from './tokens';
 import { DisclosureFooter, type PartnerIdentity } from './components';
 import type { OutlineData } from '@/lib/outline';
@@ -61,7 +62,7 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
             {data.images.map((img, i) => (
               <View key={i} style={{ width: data.images.length > 1 ? '49%' : '100%' }}>
-                <Image src={img.src} style={{ width: '100%', height: 150, borderRadius: 6, objectFit: 'cover' }} />
+                <SafeImage src={img.src} style={{ width: '100%', height: 150, borderRadius: 6, objectFit: 'cover' }} />
                 {img.caption ? (
                   <Text style={{ fontFamily: FONTS.body, fontSize: 7, color: C.inkMuted, marginTop: 3 }}>{img.caption}</Text>
                 ) : null}

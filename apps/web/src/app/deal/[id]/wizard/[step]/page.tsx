@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import { WizardShell } from '@/components/wizard-shell';
 import { ImageUpload } from '@/components/image-upload';
@@ -17,7 +17,7 @@ import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { ShareLinkManager } from '@/components/share-link-manager';
 import { InspectionWalkthrough } from '@/components/inspection-walkthrough';
 import { LegalPackPanel } from '@/components/legal-pack-panel';
-import type { InspectionState } from '@/lib/inspection';
+import { inspectionReviewProgress, type InspectionState } from '@/lib/inspection';
 import { signOut } from '@/server/actions/auth';
 import { updateDealById } from '@/server/actions/deals';
 import { pullPublicData } from '@/server/actions/public-data';
@@ -55,10 +55,12 @@ import {
   defaultViewingChecklist,
   postViewingBlockers,
   snapshotViewing,
+  withInspection,
 } from '@/lib/viewing';
 import { computeGdv, estimateRent, MIN_COMPS } from '@/lib/comps';
 
-export default function WizardStepPage({ params }: { params: { id: string; step: string } }) {
+export default function WizardStepPage() {
+  const params = useParams<{ id: string; step: string }>();
   const router = useRouter();
   const id = params.id;
   const total = SECTIONS.length;
@@ -492,7 +494,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   const searchParams = useSearchParams();
   const urlTab = searchParams.get('tab');
   const initialPhase: ViewingTab =
-    urlTab && (VIEWING_TABS as readonly string[]).includes(urlTab) ? (urlTab as ViewingTab) : (v.phase ?? 'on');
+    urlTab && (VIEWING_TABS as readonly string[]).includes(urlTab) ? (urlTab as ViewingTab) : (v.phase ?? 'inspect');
   const [phase, setPhase] = useState<ViewingTab>(initialPhase);
   const [signName, setSignName] = useState('');
   const [attendee, setAttendee] = useState('');
@@ -526,6 +528,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
       viewing: {
         ...v, checklist: defaultViewingChecklist(), photos: [], notes: '', assessment: '', summary: '',
         outcome: '', signedOffBy: '', signedOffAt: '', roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '',
+        inspection: undefined,
       },
     });
   };
@@ -554,7 +557,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
                     {new Date(rec.date).toLocaleDateString('en-GB')}{rec.attendee ? ` · ${rec.attendee}` : ''}
                   </span>
                   <span className="text-ink-muted">
-                    {p.done}/{p.total} photos{rec.outcome ? ` · ${rec.outcome}` : ''}{rec.signedOffBy ? ' · signed off' : ''}
+                    {rec.inspection ? `${inspectionReviewProgress(rec.inspection).reviewed} inspection checks reviewed · ` : ''}{p.done}/{p.total} photos{rec.outcome ? ` · ${rec.outcome}` : ''}{rec.signedOffBy ? ' · signed off' : ''}
                   </span>
                 </div>
               );
@@ -655,11 +658,16 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
 
       {/* INSPECTION - guided walkthrough (M6) */}
       {phase === 'inspect' && (
+        <>
         <InspectionWalkthrough
           state={v.inspection}
-          onChange={(next: InspectionState) => update({ viewing: { ...v, inspection: next } })}
+          onChange={(next: InspectionState) => update({ viewing: withInspection(v, next) })}
           endOrSemi={endOrSemi}
         />
+        <button type="button" onClick={logViewing} className="btn-secondary inline-flex items-center gap-2">
+          <Plus size={16} /> Log this viewing to history
+        </button>
+        </>
       )}
 
       {/* AFTER - assessment + human sign-off */}

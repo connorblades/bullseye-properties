@@ -10,10 +10,10 @@ export const metadata = { title: 'Your deals' };
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { password_set?: string };
+  searchParams: Promise<{ password_set?: string }>;
 }) {
   const user = await requireUser();
-  const justSetPassword = searchParams.password_set === '1';
+  const justSetPassword = (await searchParams).password_set === '1';
 
   return (
     <div className="min-h-screen">

@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { CookieOptions } from '@supabase/ssr';
+import { authConfigured } from './config';
 
 /**
  * Supabase clients for Server Components, Server Actions, and Route Handlers.
@@ -23,12 +24,8 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function supabaseConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
-export function createSupabaseServerClient() {
-  const cookieStore = cookies();
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies();
   return createServerClient(
     requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
     requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
@@ -46,8 +43,8 @@ export function createSupabaseServerClient() {
   );
 }
 
-export function createSupabaseActionClient() {
-  const cookieStore = cookies();
+export async function createSupabaseActionClient() {
+  const cookieStore = await cookies();
   return createServerClient(
     requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
     requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
@@ -68,7 +65,7 @@ export function createSupabaseActionClient() {
   );
 }
 
-export function createSupabaseRouteClient() {
+export async function createSupabaseRouteClient() {
   // Same shape as the action client. Kept separate for clarity / future divergence.
   return createSupabaseActionClient();
 }
@@ -78,8 +75,8 @@ export function createSupabaseRouteClient() {
  * Returns null if not signed in or if Supabase env vars aren't configured yet.
  */
 export async function getUser() {
-  if (!supabaseConfigured()) return null;
-  const supabase = createSupabaseServerClient();
+  if (!authConfigured()) return null;
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -90,18 +87,9 @@ export async function getUser() {
  * Require an authenticated user. Redirects to /login if not signed in.
  * Use at the top of every Server Component that's behind auth.
  *
- * Local dev fail-soft: when Supabase env vars are not yet set (M0 cloud
- * provisioning pending), returns a stub user so local preview works.
- * Once env is configured, full auth gating is restored.
+ * Missing configuration must never grant access through a fabricated user.
  */
 export async function requireUser() {
-  if (!supabaseConfigured()) {
-    return {
-      id: 'local-dev',
-      email: 'local-dev@bullseyeproperties.co.uk',
-      aud: 'local-dev',
-    } as const;
-  }
   const user = await getUser();
   if (!user) redirect('/login');
   return user;

@@ -1,46 +1,19 @@
 'use server';
 
 /**
- * Deals: server-side CRUD for the wizard.
- *
- * These actions are the M1 close target — once the wizard pages call these
- * instead of localStorage (see src/lib/deal-store.ts), M1 is closed and
- * deals persist across devices and sessions.
- *
- * Migration plan (queued as a focused 1-2h session):
- *   1. Replace useDeal hook in deal-store.ts to call loadDeal()/saveDealInputs() here
- *   2. Replace listDeals() to call listDealsForTenant()
- *   3. Replace newId()/saveDeal()/emptyDeal() in /deal/new to call createDeal()
- *   4. Replace seedDemoDealsIfEmpty() with a server-side seed via /admin/seed
- *   5. Add debounced auto-save (800ms) in the wizard to avoid hammering
- *
- * RLS is enforced server-side via the auth.uid() → memberships → tenant_id
- * chain. The action client is created with the user's session cookie so
- * Postgres sees them as `authenticated` and the policies apply.
+ * Authenticated deal actions. Every database operation is scoped using the
+ * current user's active membership. The direct database connection does not
+ * forward the user's Supabase session, so these checks are required here.
  */
 
 import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/server/db/client';
-import { deals, memberships } from '@/server/db/schema';
-import { getUser } from '@/server/auth/server';
+import { deals } from '@/server/db/schema';
+import { requireTenant } from '@/server/auth/tenant';
 import { extractPostcode } from '@/server/public-data/geocode';
 import type { Deal } from '@/lib/deal-store';
-
-export async function requireTenant(): Promise<{ userId: string; tenantId: string }> {
-  const user = await getUser();
-  if (!user) throw new Error('Not authenticated');
-
-  const rows = await db
-    .select({ tenantId: memberships.tenantId })
-    .from(memberships)
-    .where(and(eq(memberships.userId, user.id), isNull(memberships.deletedAt)))
-    .limit(1);
-
-  if (rows.length === 0) throw new Error('No tenant membership for this user');
-  return { userId: user.id, tenantId: rows[0].tenantId };
-}
 
 /**
  * Build the partner-scoped reference: BSE-{partner-initials}-{member-3digit}-{deal-3digit}
@@ -84,7 +57,7 @@ export type CreateDealInput = {
  * lead-review.ts) can reuse it without re-running requireTenant() per row.
  * createDeal() is the auth-resolving wrapper around this.
  */
-export async function createDealForTenant(tenantId: string, input: CreateDealInput) {
+async function createDealForTenant(tenantId: string, input: CreateDealInput) {
   // Address is mandatory and must carry a valid UK postcode - every downstream
   // public-data and title pull keys off it.
   const postcode = extractPostcode(input.address);

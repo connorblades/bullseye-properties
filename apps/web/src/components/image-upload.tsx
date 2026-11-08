@@ -127,7 +127,7 @@ export function ImageUpload({
         >
           {busy ? <ImageIcon size={20} className="animate-pulse" /> : <Upload size={20} />}
           <div className="text-xs font-bold uppercase tracking-wider">{busy ? 'Processing...' : label}</div>
-          <div className="text-[10px] text-ink-muted">Drag or click. Max 8MB. Resized to 1400px.</div>
+          <div className="text-[10px] text-ink-muted">Choose a photo. Maximum 8 MB.</div>
           {error && <div className="text-[10px] text-red-500 font-semibold mt-1">{error}</div>}
         </button>
       )}

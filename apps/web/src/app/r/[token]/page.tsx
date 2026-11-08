@@ -19,8 +19,9 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function ReportSharePage({ params }: { params: { token: string } }) {
-  const access = await resolveReportAccess(params.token);
+export default async function ReportSharePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const access = await resolveReportAccess(token);
   if (access.status === 'not_found') notFound();
   if (access.status === 'revoked' || access.status === 'expired') {
     return (
@@ -35,7 +36,7 @@ export default async function ReportSharePage({ params }: { params: { token: str
 
   // Log the open (best-effort; never blocks delivery).
   try {
-    const h = headers();
+    const h = await headers();
     const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
     await recordShareAccess(access.token, 'open', { ipHash: hashIp(ip), userAgent: h.get('user-agent') });
   } catch {
@@ -57,7 +58,7 @@ export default async function ReportSharePage({ params }: { params: { token: str
   // The inline embed (pdfView) auto-fetches the PDF to render it; we do NOT want
   // that to count as a download. Only an explicit click (pdfDownload, ?dl=1) is
   // logged as a download by the route.
-  const pdfView = `/r/${params.token}/pdf`;
+  const pdfView = `/r/${token}/pdf`;
   const pdfDownload = `${pdfView}?dl=1`;
 
   const tiles: { label: string; value: string }[] = [

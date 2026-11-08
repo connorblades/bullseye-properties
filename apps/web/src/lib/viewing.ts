@@ -1,4 +1,5 @@
 import type { Deal, StageRating, ViewingRecord, ViewingChecklistItem } from './deal-store';
+import type { InspectionState } from './inspection';
 
 /**
  * Viewing workflow helpers (M5). The on-viewing stage is a photo checklist of
@@ -59,6 +60,17 @@ export function isReadyForClient(viewing: Deal['viewing']): boolean {
   return postViewingBlockers(viewing).length === 0;
 }
 
+/** Changing inspection evidence requires a fresh human sign-off. Navigation alone does not. */
+export function withInspection(viewing: Deal['viewing'], inspection: InspectionState): Deal['viewing'] {
+  const previous = viewing.inspection;
+  const evidenceChanged = previous?.rooms !== inspection.rooms || previous?.steps !== inspection.steps;
+  return {
+    ...viewing,
+    inspection,
+    ...(evidenceChanged ? { signedOffBy: '', signedOffAt: '' } : {}),
+  };
+}
+
 /** Snapshot the current working viewing into a dated history record. */
 export function snapshotViewing(viewing: Deal['viewing'], attendee?: string): ViewingRecord {
   return {
@@ -72,5 +84,6 @@ export function snapshotViewing(viewing: Deal['viewing'], attendee?: string): Vi
     outcome: viewing.outcome,
     signedOffBy: viewing.signedOffBy,
     signedOffAt: viewing.signedOffAt,
+    inspection: viewing.inspection ? structuredClone(viewing.inspection) : undefined,
   };
 }

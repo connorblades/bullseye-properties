@@ -18,8 +18,9 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function OutlineSharePage({ params }: { params: { id: string } }) {
-  const access = await resolveOutlineAccess(params.id);
+export default async function OutlineSharePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const access = await resolveOutlineAccess(id);
   if (access.status === 'not_found') notFound();
   if (access.status === 'revoked' || access.status === 'expired') {
     return (
@@ -39,7 +40,7 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
   // Log the open for tokenised access (best-effort; never blocks the page).
   if (token) {
     try {
-      const h = headers();
+      const h = await headers();
       const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
       await recordShareAccess(token, 'open', { ipHash: hashIp(ip), userAgent: h.get('user-agent') });
     } catch {
@@ -62,7 +63,7 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
       <div className="max-w-2xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
           <Logo size="md" />
-          <a href={`/o/${params.id}/pdf`} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs">
+          <a href={`/o/${id}/pdf`} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs">
             Download PDF
           </a>
         </div>

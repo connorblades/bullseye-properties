@@ -9,8 +9,9 @@ import { downloadDealPack } from '@/server/storage/admin';
  */
 export const runtime = 'nodejs';
 
-export async function GET(req: Request, { params }: { params: { token: string } }) {
-  const access = await resolveReportAccess(params.token);
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const access = await resolveReportAccess(token);
   if (access.status !== 'ok') {
     const notFound = access.status === 'not_found';
     const msg = notFound

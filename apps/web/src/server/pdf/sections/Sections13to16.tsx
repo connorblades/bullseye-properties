@@ -1,6 +1,7 @@
 import 'server-only';
 import React from 'react';
-import { View, Text, Image, Svg, Path, Circle } from '@react-pdf/renderer';
+import { SafeImage } from '../SafeImage';
+import { View, Text, Svg, Path, Circle } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
 import { SectionHeading, Card, Body, Prose } from '../components';
 import type { ReportData } from '../report-data';
@@ -432,7 +433,7 @@ function AccreditedPartner({ data }: { data: ReportData }) {
           {/* Avatar column */}
           <View style={{ width: 132, marginRight: 14, alignItems: 'center' }}>
             {p.avatarUrl ? (
-              <Image
+              <SafeImage
                 src={p.avatarUrl}
                 style={{ width: 120, height: 120, borderRadius: 8, objectFit: 'cover', borderWidth: 1, borderColor: C.border }}
               />

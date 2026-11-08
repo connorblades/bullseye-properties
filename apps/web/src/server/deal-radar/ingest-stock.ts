@@ -832,7 +832,7 @@ export async function runDealRadarScore(
   opts: StockScoreOptions = {}
 ): Promise<{ stats: StockScoreStats; ingest: { inserted: number; skipped: number; errors: number } }> {
   const { stats, candidates } = await computeStockScores(opts);
-  const { ingestCandidatesForTenant } = await import('@/server/actions/lead-review');
+  const { ingestCandidatesForTenant } = await import('@/server/leads/ingest');
   const summary = await ingestCandidatesForTenant(tenantId, candidates, {
     capturedFor: opts.capturedAt ? opts.capturedAt.slice(0, 10) : undefined,
   });

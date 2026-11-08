@@ -17,7 +17,8 @@ import { emptyDraft, type ReportStreamState } from '@/lib/report-types';
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   let tenantId: string;
   try {
     ({ tenantId } = await requireTenant());
@@ -25,7 +26,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const row = await loadDeal(params.id);
+  const row = await loadDeal(id);
   if (!row) return new Response('Deal not found', { status: 404 });
 
   const deal = assembleDeal(row);
