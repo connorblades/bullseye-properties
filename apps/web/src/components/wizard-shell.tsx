@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
-import { Check, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { Nav } from './nav';
 import { SECTIONS, WIZARD_PHASES } from '@/lib/sections';
 import { cn } from '@/lib/utils';
@@ -30,10 +30,11 @@ export function WizardShell({
             <div className="text-xs font-bold text-ink-muted uppercase tracking-wider mb-1">Deal {dealId}</div>
             <div className="text-sm font-bold text-ink mb-2 break-words">{address || 'Property address not recorded'}</div>
             <div className="text-xs text-ink-muted mb-5">Sourcing Framework</div>
+            <p className="text-xs text-ink-muted mb-4">Stage numbers show your place in the workflow. Moving on does not mark a section as reviewed.</p>
             <ol className="space-y-1">
               {SECTIONS.map((s, i) => {
                 const stepN = i + 1;
-                const status = stepN < currentStep ? 'done' : stepN === currentStep ? 'current' : 'locked';
+                const status = stepN < currentStep ? 'previous' : stepN === currentStep ? 'current' : 'locked';
                 const firstInPhase = i === 0 || SECTIONS[i - 1].phase !== s.phase;
                 const phaseMeta = WIZARD_PHASES.find((p) => p.key === s.phase);
                 return (
@@ -49,17 +50,17 @@ export function WizardShell({
                       className={cn(
                         'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition',
                         status === 'current' && 'bg-navy/[0.08] text-navy font-bold',
-                        status === 'done' && 'text-ink-mid hover:bg-bg',
+                        status === 'previous' && 'text-ink-mid hover:bg-bg',
                         status === 'locked' && 'text-ink-muted cursor-not-allowed opacity-60'
                       )}
                     >
                       <div className={cn(
                         'w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-black flex-shrink-0',
                         status === 'current' && 'bg-navy text-white',
-                        status === 'done' && 'bg-success text-white',
+                        status === 'previous' && 'bg-bg text-ink-mid',
                         status === 'locked' && 'bg-black/5 text-ink-muted'
                       )}>
-                        {status === 'done' ? <Check size={12} /> : status === 'locked' ? <Lock size={10} /> : stepN}
+                        {status === 'locked' ? <Lock size={10} /> : stepN}
                       </div>
                       <div className="flex-1 leading-tight">{s.short}</div>
                       {s.conditional && status !== 'current' && (
