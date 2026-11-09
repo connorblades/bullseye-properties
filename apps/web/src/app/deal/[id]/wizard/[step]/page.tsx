@@ -132,7 +132,7 @@ export default function WizardStepPage() {
   return (
     <div onClickCapture={saveBeforeLink}>
     <fieldset disabled={navigating} className="min-w-0">
-    <WizardShell dealId={id} currentStep={step} signOutAction={saveAndSignOut}>
+    <WizardShell dealId={id} address={deal.address} currentStep={step} signOutAction={saveAndSignOut}>
       <div role={saveStatus === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-lg border p-3 text-sm ${saveStatus === 'error' ? 'border-red-200 bg-red-50' : 'border-black/10 bg-white'}`}>
         {saveStatus === 'saved' && 'All changes saved.'}
         {saveStatus === 'pending' && 'Changes waiting to save…'}

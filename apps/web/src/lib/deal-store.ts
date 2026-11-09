@@ -474,6 +474,7 @@ export type Deal = {
   address: string;
   postcode?: string;
   client: string;
+  clientBrief?: { id: string; name: string };
   source: 'estate-agent' | 'auction' | 'direct-to-vendor';
   progress: number;
   delivered: boolean;

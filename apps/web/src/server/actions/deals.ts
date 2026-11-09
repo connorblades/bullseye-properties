@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { ulid } from 'ulid';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db/client';
-import { deals } from '@/server/db/schema';
+import { deals, investorCriteria } from '@/server/db/schema';
 import { requireTenant } from '@/server/auth/tenant';
 import { extractPostcode } from '@/server/public-data/geocode';
 import type { Deal } from '@/lib/deal-store';
@@ -49,6 +49,7 @@ export type CreateDealInput = {
   address: string;
   source: Deal['source'];
   initialInputs?: Partial<Deal>;
+  clientBriefId?: string;
 };
 
 /**
@@ -92,6 +93,24 @@ async function createDealForTenant(tenantId: string, input: CreateDealInput) {
 
 export async function createDeal(input: CreateDealInput) {
   const { tenantId } = await requireTenant();
+  if (input.clientBriefId !== undefined) {
+    if (typeof input.clientBriefId !== 'string') throw new Error('Choose an available client brief.');
+    const briefId = input.clientBriefId.trim();
+    let initialInputs: Partial<Deal> = { ...input.initialInputs, client: '', clientBrief: undefined };
+    if (briefId) {
+      const [brief] = await db.select().from(investorCriteria).where(and(
+        eq(investorCriteria.id, briefId), eq(investorCriteria.tenantId, tenantId),
+        eq(investorCriteria.active, true), isNull(investorCriteria.deletedAt),
+      )).limit(1);
+      if (!brief) throw new Error('That client brief is no longer available. Choose another client or leave the deal unassigned.');
+      initialInputs = {
+        ...initialInputs, client: brief.name, clientBrief: { id: brief.id, name: brief.name },
+        criteria: { budget: brief.budget ?? '', areas: brief.areas ?? '', propertyType: brief.propertyType ?? '',
+          targetYield: brief.targetYield ?? '', refurbTolerance: '', epcRequirement: '', timeline: '' },
+      };
+    }
+    return createDealForTenant(tenantId, { ...input, initialInputs });
+  }
   return createDealForTenant(tenantId, input);
 }
 

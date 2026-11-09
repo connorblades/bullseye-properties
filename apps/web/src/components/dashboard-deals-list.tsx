@@ -57,8 +57,8 @@ export function DashboardDealsList() {
       <div className="grid md:grid-cols-3 gap-4 mb-10">
         {[
           { label: 'Active deals',         value: String(active.length),     icon: Clock },
-          { label: 'Delivered this month', value: String(delivered.length),  icon: CheckCircle2 },
-          { label: 'Reports generated',    value: String(delivered.length),  icon: FileText },
+          { label: 'Delivered deals', value: String(delivered.length),  icon: CheckCircle2 },
+          { label: 'All deals',            value: String(deals.length),      icon: FileText },
         ].map((s) => (
           <div key={s.label} className="card p-6 flex items-center gap-4">
             <div className="w-12 h-12 bg-navy/[0.08] rounded-xl flex items-center justify-center text-navy">
@@ -91,7 +91,8 @@ export function DashboardDealsList() {
             </div>
           )}
           {deals.map((d) => {
-            const href = d.delivered ? `/dashboard` : `/deal/${d.id}/wizard/${d.progress}`;
+            const stage = d.delivered ? SECTIONS.length : Math.max(2, Math.min(SECTIONS.length, d.progress));
+            const href = `/deal/${d.id}/wizard/${stage}`;
             return (
               <Link
                 key={d.id}

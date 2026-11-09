@@ -7,12 +7,14 @@ import { cn } from '@/lib/utils';
 
 export function WizardShell({
   dealId,
+  address,
   currentStep,
   userEmail,
   signOutAction,
   children,
 }: {
   dealId: string;
+  address?: string;
   currentStep: number;
   userEmail?: string;
   signOutAction?: () => Promise<void>;
@@ -26,7 +28,8 @@ export function WizardShell({
         <aside className="col-span-12 md:col-span-3">
           <div className="card p-5 md:sticky md:top-24">
             <div className="text-xs font-bold text-ink-muted uppercase tracking-wider mb-1">Deal {dealId}</div>
-            <div className="text-sm font-bold text-ink mb-5">Sourcing Framework</div>
+            <div className="text-sm font-bold text-ink mb-2 break-words">{address || 'Property address not recorded'}</div>
+            <div className="text-xs text-ink-muted mb-5">Sourcing Framework</div>
             <ol className="space-y-1">
               {SECTIONS.map((s, i) => {
                 const stepN = i + 1;
