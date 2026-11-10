@@ -87,7 +87,7 @@ export function PageHeader({ partner }: { partner: PartnerIdentity }) {
 }
 
 /** Fixed AI-disclosure footer (AC-07) + page number. `dark` for the cover. */
-export function DisclosureFooter({ dark = false }: { dark?: boolean }) {
+export function DisclosureFooter({ dark = false, text = DISCLOSURE_FOOTER }: { dark?: boolean; text?: string }) {
   const fg = dark ? 'rgba(255,255,255,0.7)' : C.inkMuted;
   const line = dark ? 'rgba(255,255,255,0.2)' : C.border;
   return (
@@ -106,10 +106,10 @@ export function DisclosureFooter({ dark = false }: { dark?: boolean }) {
       }}
     >
       <Text style={{ flex: 1, fontFamily: FONTS.body, fontSize: 6.5, lineHeight: 1.4, color: fg }}>
-        {DISCLOSURE_FOOTER}
+        {text}
       </Text>
       <Text
-        style={{ marginLeft: 12, fontFamily: FONTS.body, fontSize: 6.5, color: fg }}
+        style={{ width: 32, flexShrink: 0, textAlign: 'right', marginLeft: 12, fontFamily: FONTS.body, fontSize: 6.5, color: fg }}
         render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
       />
     </View>

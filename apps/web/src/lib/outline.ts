@@ -34,6 +34,7 @@ export type OutlineData = {
   fitMet: number;
   fitApplicable: number;
   matched: string[];   // criteria the property meets
+  unmatched: string[]; // comparisons which do not meet the entered criteria
   highlights: string[]; // light location highlights (no deep DD)
   recommendation: string;
   images: { src: string; caption?: string }[]; // up to 2 pre-viewing visuals (area map / context shots)
@@ -41,20 +42,17 @@ export type OutlineData = {
 
 const gbp = (n: number) => '£' + Math.round(n).toLocaleString('en-GB');
 
-/** The data-led recommendation + invite shown to the client. */
+/** Summarise entered evidence without inventing a positive recommendation. */
 export function outlineRecommendation(deal: Deal): string {
   const fit = scoreLeadFit(deal);
   const fin = computeFinancials(deal);
-  const matched = fit.reasons.filter((r) => r.ok).map((r) => r.text.toLowerCase());
-
-  if (fit.applicable > 0 && fit.met > 0) {
-    const clause = matched.length ? `: ${matched.join(', ')}` : '';
-    return `This matches ${fit.met} of ${fit.applicable} of your criteria${clause}. On paper it's a strong fit. Shall I arrange a viewing and run the full due diligence?`;
+  if (fit.applicable > 0) {
+    return `The entered information matches ${fit.met} of ${fit.applicable} criteria that can currently be compared. ${fit.met < fit.applicable ? 'Review the unmet criteria and missing evidence before deciding whether to arrange a viewing.' : 'This is an initial comparison; a viewing and full due diligence are still needed.'}`;
   }
   if (fin.grossYield > 0) {
-    return `On the numbers this looks worth a closer look (around ${fin.grossYield.toFixed(1)}% gross yield). Shall I arrange a viewing and run the full due diligence?`;
+    return `The entered price and rent imply ${fin.grossYield.toFixed(1)}% gross yield. Client criteria and supporting property evidence still need review before deciding whether to arrange a viewing.`;
   }
-  return 'This one looks worth a closer look. Shall I arrange a viewing and run the full due diligence?';
+  return 'There is not enough entered information to assess this property\'s fit. Add client criteria and property evidence before making a recommendation.';
 }
 
 /**
@@ -121,7 +119,8 @@ export function buildOutline(deal: Deal): OutlineData {
 
   const pd = deal.publicData;
   const highlights: string[] = [];
-  const area = pd?.areaStats?.areaName || pd?.district || deal.criteria.areas;
+  // Preferred search areas are a client instruction, not evidence of location.
+  const area = pd?.areaStats?.areaName || pd?.district;
   if (area) highlights.push(`Location: ${area}`);
   if (pd?.hpi) highlights.push(`Local prices up ~${pd.hpi.cagr10yrPct}% a year over 10 years (Land Registry HPI)`);
   if (pd?.areaStats?.employmentRate) highlights.push(`Local employment rate ${pd.areaStats.employmentRate}%`);
@@ -151,6 +150,7 @@ export function buildOutline(deal: Deal): OutlineData {
     fitMet: fit.met,
     fitApplicable: fit.applicable,
     matched: fit.reasons.filter((r) => r.ok).map((r) => r.text),
+    unmatched: fit.reasons.filter((r) => !r.ok).map((r) => r.text),
     highlights: highlights.slice(0, 5),
     recommendation: outlineRecommendation(deal),
     images: images.slice(0, 2),

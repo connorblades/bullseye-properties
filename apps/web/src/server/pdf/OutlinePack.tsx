@@ -74,7 +74,7 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
         {/* Recommendation */}
         <View style={{ borderWidth: 1, borderColor: C.navy, borderRadius: 8, padding: 14, marginBottom: 16 }}>
           <Text style={{ fontFamily: FONTS.body, fontSize: 8, fontWeight: 700, color: C.navy, letterSpacing: 0.8, marginBottom: 4 }}>
-            OUR RECOMMENDATION
+            INITIAL ASSESSMENT
           </Text>
           <Text style={{ fontFamily: FONTS.body, fontSize: 12, lineHeight: 1.5, color: C.ink }}>{data.recommendation}</Text>
         </View>
@@ -119,13 +119,21 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
         {data.fitApplicable > 0 && (
           <View style={{ marginBottom: 16 }}>
             <Text style={{ fontFamily: FONTS.body, fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 6 }}>
-              {`Why this fits your criteria (${data.fitMet} of ${data.fitApplicable})`}
+              {`Criteria comparison (${data.fitMet} of ${data.fitApplicable} match)`}
+            </Text>
+            <Text style={{ fontFamily: FONTS.body, fontSize: 8, color: C.inkMuted, marginBottom: 6 }}>
+              Only checks with enough entered information are counted. Missing inputs are not a match.
             </Text>
             {data.matched.map((m, i) => (
               <View key={i} style={{ flexDirection: 'row', marginBottom: 3 }}>
                 <Tick />
                 <Text style={{ fontFamily: FONTS.body, fontSize: 10, color: C.inkMid }}>{m}</Text>
               </View>
+            ))}
+            {data.unmatched.map((m, i) => (
+              <Text key={`unmet-${i}`} style={{ fontFamily: FONTS.body, fontSize: 10, color: C.inkMid, marginBottom: 3 }}>
+                {`Needs review: ${m}`}
+              </Text>
             ))}
           </View>
         )}
@@ -156,7 +164,7 @@ export function OutlinePack({ data, partner, preparedFor, generatedOn }: Outline
           assessment and financial detail follow in the complete report after a viewing.
         </Text>
 
-        <DisclosureFooter />
+        <DisclosureFooter text="This outline uses entered information and automated calculations. It does not confirm a completed viewing, due diligence or partner sign-off." />
       </Page>
     </Document>
   );

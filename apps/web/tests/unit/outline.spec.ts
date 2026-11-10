@@ -25,14 +25,16 @@ describe('buildOutline', () => {
     expect(o.recommendation).toMatch(/viewing/i);
   });
 
-  it('falls back to a numbers-led recommendation when no criteria are set', () => {
+  it('reports entered yield without endorsing a property when no criteria are set', () => {
     const deal = emptyDeal('d', {
       address: '1 A St, NG1 1AA',
       property: { type: '', bedrooms: '', bathrooms: '', floorArea: '', plotSize: '', parking: '', yearBuilt: '', heating: '', askingPrice: '100000', documents: [] },
       financials: { purchasePrice: '100000', monthlyRent: '700', annualCosts: '' },
     });
     const rec = outlineRecommendation(deal);
-    expect(rec).toMatch(/closer look/i);
+    expect(rec).toMatch(/8.4% gross yield/i);
+    expect(rec).toMatch(/evidence still need review/i);
+    expect(rec).not.toMatch(/worth|strong fit|shall I arrange/i);
     expect(rec).toMatch(/viewing/i);
     expect(rec).not.toMatch(/matches/i);
   });
@@ -40,6 +42,47 @@ describe('buildOutline', () => {
   it('contains no em or en dashes (house style)', () => {
     const o = buildOutline(browning());
     expect(o.recommendation).not.toMatch(/[—–]/);
+  });
+
+  it('shows missing evidence instead of recommending an empty deal', () => {
+    const o = buildOutline(emptyDeal('d-test', { address: 'SYSTEM TEST - NOT A PROPERTY' }));
+    expect(o.recommendation).toContain('not enough entered information');
+    expect(o.recommendation).not.toMatch(/worth|strong fit|shall I arrange/i);
+    expect(o.fitApplicable).toBe(0);
+  });
+
+  it('keeps unmet criteria visible even when one criterion matches', () => {
+    const d = browning();
+    d.criteria.budget = '50000';
+    d.criteria.targetYield = '20%';
+    d.criteria.propertyType = 'Bungalow';
+    const o = buildOutline(d);
+    expect(o.fitMet).toBe(1);
+    expect(o.fitApplicable).toBe(4);
+    expect(o.unmatched).toHaveLength(3);
+    expect(o.unmatched).toContain('Over budget');
+    expect(o.recommendation).toContain('Review the unmet criteria');
+    expect(o.recommendation).not.toMatch(/strong fit|worth a closer look/i);
+  });
+
+  it('does not turn zero matches into a positive yield recommendation', () => {
+    const d = browning();
+    d.criteria.budget = '50000';
+    d.criteria.targetYield = '20%';
+    d.criteria.propertyType = 'Bungalow';
+    d.criteria.areas = 'Test district elsewhere';
+    const o = buildOutline(d);
+    expect(o.recommendation).toContain('matches 0 of 4');
+    expect(o.unmatched).toHaveLength(4);
+    expect(o.recommendation).not.toMatch(/strong fit|worth a closer look/i);
+  });
+
+  it('does not present a preferred search area as the property location', () => {
+    const d = emptyDeal('d-test', { address: 'SYSTEM TEST - NOT A PROPERTY' });
+    d.criteria.areas = 'Preferred test area';
+    expect(buildOutline(d).highlights).not.toContain('Location: Preferred test area');
+    d.publicData = { district: 'Recorded test district' } as NonNullable<typeof d.publicData>;
+    expect(buildOutline(d).highlights).toContain('Location: Recorded test district');
   });
 });
 
