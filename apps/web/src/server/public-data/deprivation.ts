@@ -20,7 +20,7 @@ export async function fetchDeprivation(
   lng: number,
   radiusKm = 3,
 ): Promise<GeoCollection | null> {
-  const key = `deprivation:v2:${lat.toFixed(3)},${lng.toFixed(3)}:${radiusKm}`;
+  const key = `deprivation:v3:${lat},${lng}:${radiusKm}`;
   return cached(key, 'deprivation', TTL.month, () =>
     failSoft('deprivation', async () => {
       const dLat = radiusKm / 111;
@@ -38,9 +38,11 @@ export async function fetchDeprivation(
         maxAllowableOffset: String(offset),
         f: 'geojson',
       });
-      const data = await fetchJson<GeoCollection>(`${IMD_QUERY}?${params.toString()}`);
-      if (!data.features || data.features.length === 0) throw new Error('no LSOA deprivation data');
-      return data;
+      const data = await fetchJson<GeoCollection & { exceededTransferLimit?: boolean; properties?: { exceededTransferLimit?: boolean } }>(`${IMD_QUERY}?${params.toString()}`);
+      if (!Array.isArray(data.features) || data.exceededTransferLimit || data.properties?.exceededTransferLimit) {
+        throw new Error('incomplete LSOA deprivation response');
+      }
+      return { type: 'FeatureCollection', features: data.features, period: '2019', retrievedAt: new Date().toISOString() };
     }),
   );
 }

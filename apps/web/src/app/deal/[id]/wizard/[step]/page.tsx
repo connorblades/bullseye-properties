@@ -6,6 +6,7 @@ import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, Trendi
 import { WizardShell } from '@/components/wizard-shell';
 import { ImageUpload } from '@/components/image-upload';
 import { AmenitiesEditor } from '@/components/amenities-editor';
+import { DueDiligenceMap } from '@/components/due-diligence-map';
 import { CrimeProfile } from '@/components/crime-profile';
 import { DocumentsUpload } from '@/components/documents-upload';
 import {
@@ -289,6 +290,8 @@ function AutoPullPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
           </div>
         )}
       </div>
+
+      <DueDiligenceMap deal={deal} />
 
       <div className="card p-6">
         <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-3">Area map</div>
@@ -788,6 +791,7 @@ function DueDiligencePanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
 
   return (
     <div className="space-y-4">
+      <DueDiligenceMap deal={deal} />
       {!pd && (
         <div className="card p-5 bg-amber/5 border-amber/20 flex items-start gap-2">
           <AlertTriangle size={16} className="text-amber mt-0.5" />

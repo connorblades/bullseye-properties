@@ -7,4 +7,6 @@ export type GeoFeature = {
 export type GeoCollection = {
   type: 'FeatureCollection';
   features: GeoFeature[];
+  period?: string;
+  retrievedAt?: string;
 };
