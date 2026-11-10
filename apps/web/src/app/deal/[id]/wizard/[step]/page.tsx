@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import { WizardShell } from '@/components/wizard-shell';
@@ -27,6 +27,7 @@ import {
   type SectionDraft,
   type PublishSection,
 } from '@/lib/report-types';
+import { createSavedAction } from '@/lib/saved-action';
 import { SECTIONS } from '@/lib/sections';
 import { fmtMoney } from '@/lib/utils';
 import {
@@ -64,7 +65,8 @@ export default function WizardStepPage() {
   const total = SECTIONS.length;
   const step = Math.max(1, Math.min(total, parseInt(params.step, 10)));
   const [deal, update, { loading, error, saveStatus, flush }] = useDeal(id);
-  const [navigating, setNavigating] = useState(false);
+  const savedAction = useMemo(() => createSavedAction(flush), [flush]);
+  const navigating = useSyncExternalStore(savedAction.subscribe, savedAction.getBusy, savedAction.getBusy);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -97,17 +99,13 @@ export default function WizardStepPage() {
     );
   }
 
-  const saveAndNavigate = async (href: string) => {
-    if (navigating) return;
-    setNavigating(true);
-    try {
-      if (await flush()) router.push(href);
-    } finally { setNavigating(false); }
-  };
+  const saveAndNavigate = (href: string, prepare?: () => void) =>
+    savedAction.run(() => { router.push(href); }, prepare);
   const goNext = () => {
-    if (navigating) return;
-    update(step < total ? { progress: step + 1 } : { delivered: true, progress: total });
-    void saveAndNavigate(step < total ? `/deal/${id}/wizard/${step + 1}` : '/dashboard');
+    void saveAndNavigate(
+      step < total ? `/deal/${id}/wizard/${step + 1}` : '/dashboard',
+      () => update(step < total ? { progress: step + 1 } : { delivered: true, progress: total }),
+    );
   };
   const goBack = () => { void saveAndNavigate(step > 1 ? `/deal/${id}/wizard/${step - 1}` : '/deal/new'); };
   const saveBeforeLink = (event: MouseEvent<HTMLDivElement>) => {
@@ -122,16 +120,11 @@ export default function WizardStepPage() {
     event.stopPropagation();
     void saveAndNavigate(url.pathname + url.search + url.hash);
   };
-  const saveAndSignOut = async () => {
-    if (navigating) return;
-    setNavigating(true);
-    try { if (await flush()) await signOut(); }
-    finally { setNavigating(false); }
-  };
+  const saveAndSignOut = async () => { await savedAction.run(signOut); };
 
   return (
     <div onClickCapture={saveBeforeLink}>
-    <fieldset disabled={navigating} className="min-w-0">
+    <fieldset disabled={navigating} aria-busy={navigating} className="min-w-0">
     <WizardShell dealId={id} address={deal.address} currentStep={step} signOutAction={saveAndSignOut}>
       <div role={saveStatus === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-lg border p-3 text-sm ${saveStatus === 'error' ? 'border-red-200 bg-red-50' : 'border-black/10 bg-white'}`}>
         {saveStatus === 'saved' && 'All changes saved.'}
@@ -155,21 +148,20 @@ export default function WizardStepPage() {
       {step === 11 && <RefurbPanel deal={deal} update={update} />}
       {step === 12 && <FinancialsPanel deal={deal} update={update} />}
       {step === 13 && <OfferPanel deal={deal} update={update} />}
-      {step === 14 && <GeneratePanel deal={deal} onDone={goNext} />}
+      {step === 14 && <GeneratePanel deal={deal} onDone={goNext} runAfterSave={savedAction.run} />}
       {step === 15 && <DeliverPanel deal={deal} />}
 
       <div className="mt-8 flex items-center justify-between gap-3">
         <button onClick={goBack} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
         <div className="flex items-center gap-4">
-          <a
-            href={`/o/${id}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => { void saveAndNavigate(`/o/${id}`); }}
             title="Preview the pre-viewing outline pack (your own copy)"
             className="text-xs font-semibold text-ink-muted hover:text-navy inline-flex items-center gap-1.5"
           >
             <ExternalLink size={14} /> Outline preview
-          </a>
+          </button>
           <a
             href={`/deal/${id}/share`}
             title="Create and manage revocable share links to send to investors"
@@ -1212,7 +1204,7 @@ function SectionEditor({
   );
 }
 
-function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
+function GeneratePanel({ deal, onDone, runAfterSave }: { deal: Deal; onDone: () => void; runAfterSave: (action: () => Promise<void>) => Promise<boolean> }) {
   const [phase, setPhase] = useState<GenPhase>('idle');
   const [drafts, setDrafts] = useState<ReportStreamState | null>(null);
   const [edited, setEdited] = useState<Record<string, string>>({});
@@ -1221,35 +1213,38 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
   const degraded = drafts ? Object.values(drafts).some((d) => d.degraded) : false;
 
   const start = async () => {
-    setPhase('generating');
     setError(null);
-    setDrafts(null);
-    setEdited({});
     try {
-      const resp = await fetch(`/api/deal/${deal.id}/report-stream`, { method: 'POST' });
-      if (!resp.ok || !resp.body) throw new Error('Generation failed to start.');
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      let last: ReportStreamState | null = null;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop() ?? '';
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const obj = JSON.parse(line) as ReportStreamState | { error: string };
-          if ('error' in obj) throw new Error(obj.error);
-          last = obj;
-          setDrafts({ ...obj });
+      const saved = await runAfterSave(async () => {
+        setPhase('generating');
+        setDrafts(null);
+        setEdited({});
+        const resp = await fetch(`/api/deal/${deal.id}/report-stream`, { method: 'POST' });
+        if (!resp.ok || !resp.body) throw new Error('Generation failed to start.');
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let last: ReportStreamState | null = null;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const obj = JSON.parse(line) as ReportStreamState | { error: string };
+            if ('error' in obj) throw new Error(obj.error);
+            last = obj;
+            setDrafts({ ...obj });
+          }
         }
-      }
-      if (last) {
-        setEdited(Object.fromEntries(SECTION_META.map(({ key }) => [key, last![key].text])));
-      }
-      setPhase('review');
+        if (last) {
+          setEdited(Object.fromEntries(SECTION_META.map(({ key }) => [key, last![key].text])));
+        }
+        setPhase('review');
+      });
+      if (!saved) setError('Save your changes using Retry save above, then generate the report again.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Generation failed. Please retry.');
       setPhase('idle');
@@ -1265,33 +1260,36 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
       setError(`Before sending to a client, complete the post-viewing review in Stage 8 (After): needs ${viewingBlockers.join(' and ')}.`);
       return;
     }
-    setPhase('publishing');
     setError(null);
     try {
-      const payload: PublishSection[] = SECTION_META.map(({ key }) => ({
-        section: key,
-        raw: drafts[key].raw,
-        edited: edited[key] ?? drafts[key].text,
-        model: drafts[key].model,
-        promptVersionHash: drafts[key].promptVersionHash,
-        inputTokens: drafts[key].inputTokens,
-        outputTokens: drafts[key].outputTokens,
-        manualDraft: drafts[key].manualDraft,
-      }));
-      const res = await publishReport(deal.id, payload);
-      if (!res.ok) {
-        setError(`Publish failed: ${res.error}`);
-        setPhase('review');
-        return;
-      }
-      if (res.renderError) {
-        // The narratives were saved, but there is no PDF to deliver, so stay on
-        // review with the real reason rather than advancing to an empty delivery.
-        setError(`Report saved, but the PDF render failed: ${res.renderError}. Fix the flagged data and republish.`);
-        setPhase('review');
-        return;
-      }
-      setPhase('published');
+      const saved = await runAfterSave(async () => {
+        setPhase('publishing');
+        const payload: PublishSection[] = SECTION_META.map(({ key }) => ({
+          section: key,
+          raw: drafts[key].raw,
+          edited: edited[key] ?? drafts[key].text,
+          model: drafts[key].model,
+          promptVersionHash: drafts[key].promptVersionHash,
+          inputTokens: drafts[key].inputTokens,
+          outputTokens: drafts[key].outputTokens,
+          manualDraft: drafts[key].manualDraft,
+        }));
+        const res = await publishReport(deal.id, payload);
+        if (!res.ok) {
+          setError(`Publish failed: ${res.error}`);
+          setPhase('review');
+          return;
+        }
+        if (res.renderError) {
+          // The narratives were saved, but there is no PDF to deliver, so stay on
+          // review with the real reason rather than advancing to an empty delivery.
+          setError(`Report saved, but the PDF render failed: ${res.renderError}. Fix the flagged data and republish.`);
+          setPhase('review');
+          return;
+        }
+        setPhase('published');
+      });
+      if (!saved) setError('Save your changes using Retry save above, then publish the report again.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Publish failed. Please retry.');
       setPhase('review');
