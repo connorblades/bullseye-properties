@@ -1,18 +1,20 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, DM_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { PwaRegister } from '@/components/pwa-register';
 
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800', '900'],
+const inter = localFont({
+  src: '../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
+  weight: '100 900',
   display: 'swap',
   variable: '--font-inter',
 });
 
-const dmMono = DM_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
+const dmMono = localFont({
+  src: [
+    { path: '../../node_modules/@fontsource/dm-mono/files/dm-mono-latin-400-normal.woff2', weight: '400' },
+    { path: '../../node_modules/@fontsource/dm-mono/files/dm-mono-latin-500-normal.woff2', weight: '500' },
+  ],
   display: 'swap',
   variable: '--font-dm-mono',
 });

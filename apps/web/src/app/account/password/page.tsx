@@ -10,7 +10,7 @@ export const metadata = { title: 'Set password' };
 export default async function SetPasswordPage({
   searchParams,
 }: {
-  searchParams: { error?: string };
+  searchParams: Promise<{ error?: string }>;
 }) {
   const user = await requireUser();
 
@@ -30,7 +30,7 @@ export default async function SetPasswordPage({
           from this page. Minimum 8 characters.
         </p>
 
-        <SetPasswordForm errorMessage={searchParams.error ? decodeURIComponent(searchParams.error) : null} />
+        <SetPasswordForm errorMessage={(await searchParams).error ?? null} />
       </main>
     </div>
   );

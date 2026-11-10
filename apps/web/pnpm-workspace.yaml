@@ -1,0 +1,12 @@
+packages:
+  - '.'
+
+minimumReleaseAgeStrict: true
+
+# Keep Next and the CSS build tools on the patched 8.x line.
+overrides:
+  'postcss@<8.5.23': '8.5.23'
+
+# Native build helper used by the pinned Drizzle toolchain.
+allowBuilds:
+  'esbuild@0.18.20 || 0.19.12': true

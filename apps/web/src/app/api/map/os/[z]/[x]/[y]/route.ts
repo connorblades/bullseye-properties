@@ -5,20 +5,27 @@
  */
 
 import { NextRequest } from 'next/server';
+import { requireTenant } from '@/server/auth/tenant';
 
 const OS_STYLE = 'Light_3857'; // clean OS basemap in Web Mercator
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { z: string; x: string; y: string } },
+  { params }: { params: Promise<{ z: string; x: string; y: string }> },
 ) {
+  try {
+    await requireTenant();
+  } catch {
+    return new Response('Unauthorized', { status: 401 });
+  }
   const key = process.env.OS_API_KEY;
   if (!key) {
     return new Response('OS_API_KEY not configured', { status: 503 });
   }
 
-  const { z, x, y } = params;
-  if (!/^\d+$/.test(z) || !/^\d+$/.test(x) || !/^\d+$/.test(y)) {
+  const { z, x, y } = await params;
+  if (!/^\d{1,2}$/.test(z) || !/^\d{1,7}$/.test(x) || !/^\d{1,7}$/.test(y) ||
+      Number(z) > 20 || Number(x) >= 2 ** Number(z) || Number(y) >= 2 ** Number(z)) {
     return new Response('bad tile', { status: 400 });
   }
 
@@ -30,8 +37,8 @@ export async function GET(
     return new Response(body, {
       headers: {
         'content-type': 'image/png',
-        // OS tiles are static; cache hard at the edge + browser.
-        'cache-control': 'public, max-age=86400, s-maxage=604800, immutable',
+        // Keep browser caching without allowing a shared edge cache to skip tenant authorization.
+        'cache-control': 'private, max-age=86400',
       },
     });
   } catch {

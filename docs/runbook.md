@@ -71,6 +71,36 @@ Owner: Connor Blades. On-call: same person. Escalation: none external.
 
 ---
 
+## Playbook: Preview sign-in returns to an unreachable domain
+
+**Symptom:** Google or an email sign-in link finishes at `/auth/callback` on a
+different host, with `ERR_NAME_NOT_RESOLVED` instead of the dashboard.
+
+The sign-in actions construct their callback from `NEXT_PUBLIC_SITE_URL`.
+Check both the deployment setting and Supabase's allowed Redirect URLs; changing
+only one can still send the user to the default Site URL.
+
+1. Use one stable branch-preview hostname for sign-in and subsequent testing.
+2. In Vercel, override `NEXT_PUBLIC_SITE_URL` for that preview branch only. Use
+   the full HTTPS origin with no trailing slash. Keep production's value intact.
+3. In Supabase Authentication > URL Configuration, add that exact origin plus
+   `/auth/callback` to Redirect URLs. Avoid a project-wide wildcard.
+4. Deploy that branch again: saved environment changes do not update an existing
+   deployment. Check the selected source branch and Preview environment.
+5. Start a fresh sign-in from the stable hostname in the same browser. Verify
+   that it returns there and opens the authenticated dashboard. Old callback
+   links may have expired and do not establish that the new setting failed.
+6. Then test save, failed-save retry and reload on a labelled synthetic deal.
+
+The recovery branch uses
+`https://bullseye-properties-git-fix-bpos-r-2c09ac-connorblades-projects.vercel.app`.
+The exact callback and branch-specific Config override were saved on 10 November
+2026. This configuration record is not a claim of completed live sign-in testing.
+
+Reference: [Supabase redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
+
+---
+
 ## Playbook: Mapbox rate limit hit
 
 **Symptom:** PDF generation succeeds but maps render as broken images, or 429 errors in Sentry.

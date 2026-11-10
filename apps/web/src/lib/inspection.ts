@@ -467,10 +467,23 @@ export interface RoomEntry extends RoomDimensions {
   id: string;
   works?: RoomWork[];
   includeCeiling?: boolean;
+  rating?: number;
+  notes?: string;
+  photos?: string[];
 }
+
+export const INSPECTION_RESULTS = {
+  'no-concern': 'No concern noted',
+  concern: 'Concern noted',
+  'not-inspected': 'Unable to inspect',
+  'not-applicable': 'Not applicable',
+} as const;
+export type InspectionResult = keyof typeof INSPECTION_RESULTS;
 
 /** What the partner captured against one walkthrough step. */
 export interface StepCapture {
+  /** An explicit observation, never inferred from a photo, rating or cost. */
+  result?: InspectionResult;
   /** Condition score 1 (worst) - 10 (best). */
   rating?: number;
   notes?: string;
@@ -499,10 +512,36 @@ export interface InspectionState {
   rooms: RoomEntry[];
   /** Per-step capture, keyed by step.key. */
   steps: Record<string, StepCapture>;
+  /** Resume the guided walkthrough at the last selected check. */
+  activeStepKey?: string;
 }
 
 export function emptyInspection(): InspectionState {
   return { rooms: [], steps: {} };
+}
+
+export function stepReviewed(capture?: StepCapture): boolean {
+  if (!capture?.result || !Object.hasOwn(INSPECTION_RESULTS, capture.result)) return false;
+  if (capture.result === 'not-inspected' || capture.result === 'not-applicable') return !!capture.notes?.trim();
+  return true;
+}
+
+export function inspectionReviewProgress(state: InspectionState, steps: InspectionStep[] = INSPECTION_STEPS) {
+  const captures = steps.map((step) => state.steps[step.key]);
+  return {
+    total: steps.length,
+    reviewed: captures.filter(stepReviewed).length,
+    concerns: captures.filter((capture) => capture?.result === 'concern' || capture?.flagged === true).length,
+    notInspected: captures.filter((capture) => capture?.result === 'not-inspected').length,
+  };
+}
+
+/** Saved position if valid; otherwise resume at the first unresolved check. */
+export function activeInspectionIndex(state: InspectionState, steps: InspectionStep[]): number {
+  const saved = steps.findIndex((step) => step.key === state.activeStepKey);
+  if (saved >= 0) return saved;
+  const unresolved = steps.findIndex((step) => !stepReviewed(state.steps[step.key]));
+  return Math.max(0, unresolved);
 }
 
 function areaFrom(capture: StepCostCapture, rooms: RoomEntry[]): number {

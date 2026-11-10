@@ -15,7 +15,7 @@ import { ulid } from 'ulid';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/server/db/client';
 import { investorCriteria } from '@/server/db/schema';
-import { requireTenant } from '@/server/actions/deals';
+import { requireTenant } from '@/server/auth/tenant';
 import type { ParsedInvestor } from '@/lib/investor-csv';
 
 /** The editable fields of an investor brief (everything but the identifiers). */

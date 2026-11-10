@@ -4,8 +4,8 @@ import { MailCheck } from 'lucide-react';
 
 export const metadata = { title: 'Check your email' };
 
-export default function LoginSentPage({ searchParams }: { searchParams: { email?: string } }) {
-  const email = searchParams.email ? decodeURIComponent(searchParams.email) : 'your email';
+export default async function LoginSentPage({ searchParams }: { searchParams: Promise<{ email?: string }> }) {
+  const email = (await searchParams).email ? (await searchParams).email : 'your email';
   return (
     <main className="min-h-screen flex items-center justify-center px-6 bg-bg">
       <div className="card p-10 w-full max-w-md text-center">

@@ -1,6 +1,7 @@
 import 'server-only';
 import React from 'react';
-import { View, Text, Image, Svg, Rect, Line } from '@react-pdf/renderer';
+import { SafeImage } from '../SafeImage';
+import { View, Text, Svg, Rect, Line } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
 import { SectionHeading, Card, Body, KeyRisks, RiskCallout, Prose } from '../components';
 import type { ReportData } from '../report-data';
@@ -285,13 +286,13 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             {deal.location.mapImage ? (
               <View style={{ width: pub?.maps?.amenities ? '49%' : '100%' }}>
-                <Image src={deal.location.mapImage} style={{ width: '100%', height: 150, borderRadius: 4, objectFit: 'cover' }} />
+                <SafeImage src={deal.location.mapImage} style={{ width: '100%', height: 150, borderRadius: 4, objectFit: 'cover' }} />
                 <Text style={{ fontFamily: FONTS.body, fontSize: 7, color: C.inkMuted, marginTop: 3 }}>Property location</Text>
               </View>
             ) : null}
             {pub?.maps?.amenities ? (
               <View style={{ width: deal.location.mapImage ? '49%' : '100%' }}>
-                <Image src={pub.maps.amenities} style={{ width: '100%', height: 150, borderRadius: 4, objectFit: 'cover' }} />
+                <SafeImage src={pub.maps.amenities} style={{ width: '100%', height: 150, borderRadius: 4, objectFit: 'cover' }} />
                 <Text style={{ fontFamily: FONTS.body, fontSize: 7, color: C.inkMuted, marginTop: 3 }}>Amenities</Text>
               </View>
             ) : null}
@@ -359,7 +360,7 @@ export function SectionsOneToEight({ data }: { data: ReportData }) {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
             {deal.viewing.photos.map((src, i) =>
               src ? (
-                <Image
+                <SafeImage
                   key={i}
                   src={src}
                   style={{ width: 160, height: 120, borderRadius: 4, objectFit: 'cover', marginRight: 9, marginBottom: 9 }}

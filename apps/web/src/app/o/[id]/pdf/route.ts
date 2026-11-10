@@ -6,8 +6,9 @@ import { renderOutlinePackToBuffer } from '@/server/pdf/render';
 /** Public 1-page Outline Deal PDF for the shareable link (tokenised in M4-T2). */
 export const runtime = 'nodejs';
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const access = await resolveOutlineAccess(params.id);
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const access = await resolveOutlineAccess(id);
   if (access.status !== 'ok') {
     const msg = access.status === 'not_found' ? 'Not found' : 'This link is no longer active';
     return new Response(msg, { status: access.status === 'not_found' ? 404 : 410 });

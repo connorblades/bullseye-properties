@@ -1,6 +1,7 @@
 import 'server-only';
 import React from 'react';
-import { View, Text, Image, Svg, Path, Rect, Circle, Line } from '@react-pdf/renderer';
+import { SafeImage } from '../SafeImage';
+import { View, Text, Svg, Path, Rect, Circle, Line } from '@react-pdf/renderer';
 import { C, FONTS, fmtGBP, fmtPct } from '../tokens';
 import { SectionHeading, Card, Body, Prose } from '../components';
 import type { ReportData } from '../report-data';
@@ -240,7 +241,7 @@ function DriversSection({ data }: { data: ReportData }) {
           {drivers.map((d) => (
             <Card key={d.id} style={{ width: (CONTENT_W - 12) / 2, marginBottom: 12, padding: 0, overflow: 'hidden' }}>
               {d.imageData ? (
-                <Image src={d.imageData} style={{ width: '100%', height: 84, objectFit: 'cover' }} />
+                <SafeImage src={d.imageData} style={{ width: '100%', height: 84, objectFit: 'cover' }} />
               ) : null}
               <View style={{ padding: 10 }}>
                 <Text style={{ fontFamily: FONTS.body, fontSize: 11, fontWeight: 700, color: C.navy }}>

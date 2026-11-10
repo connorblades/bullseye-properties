@@ -20,15 +20,15 @@ function clientIp(request: NextRequest): string {
 export function isPublicPath(path: string): boolean {
   return (
     path === '/' ||
-    path.startsWith('/login') ||
-    path.startsWith('/auth') ||
-    path.startsWith('/_next') ||
-    path.startsWith('/api/public') ||
+    path === '/login' || path.startsWith('/login/') ||
+    path === '/auth' || path.startsWith('/auth/') ||
+    path.startsWith('/_next/') ||
+    path === '/api/public' || path.startsWith('/api/public/') ||
     // Machine-to-machine ingress (AC-13): the external scraper has no auth
     // session, it authenticates with the LEAD_INGEST_TOKEN bearer token inside
     // the route handler. Without this bypass the middleware redirects the POST
     // to /login and the endpoint is unreachable.
-    path.startsWith('/api/leads/ingest')
+    path === '/api/leads/ingest'
   );
 }
 
@@ -62,13 +62,7 @@ export async function middleware(request: NextRequest) {
 
   const isPublic = isPublicPath(path);
 
-  // Local dev fail-soft: when Supabase env vars are not yet set (M0 cloud
-  // provisioning still pending), don't gate routes — the wizard is reachable
-  // from localhost so M1 can be built and previewed before M0 is closed.
-  // Once NEXT_PUBLIC_SUPABASE_URL is present, full auth gating is restored.
-  const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
-
-  if (supabaseConfigured && !user && !isPublic) {
+  if (!user && !isPublic) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/login';
     redirectUrl.searchParams.set('next', path);

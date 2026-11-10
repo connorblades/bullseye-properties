@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState, useSyncExternalStore, type MouseEvent } from 'react';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { ArrowRight, ArrowLeft, Sparkles, Plus, X, Loader2, CheckCircle2, TrendingUp, Database, AlertTriangle } from 'lucide-react';
 import { WizardShell } from '@/components/wizard-shell';
 import { ImageUpload } from '@/components/image-upload';
 import { AmenitiesEditor } from '@/components/amenities-editor';
+import { DueDiligenceMap } from '@/components/due-diligence-map';
 import { CrimeProfile } from '@/components/crime-profile';
 import { DocumentsUpload } from '@/components/documents-upload';
 import {
@@ -17,9 +18,8 @@ import { VendorCompanyLookup } from '@/components/vendor-company-lookup';
 import { ShareLinkManager } from '@/components/share-link-manager';
 import { InspectionWalkthrough } from '@/components/inspection-walkthrough';
 import { LegalPackPanel } from '@/components/legal-pack-panel';
-import type { InspectionState } from '@/lib/inspection';
+import { inspectionReviewProgress, type InspectionState } from '@/lib/inspection';
 import { signOut } from '@/server/actions/auth';
-import { updateDealById } from '@/server/actions/deals';
 import { pullPublicData } from '@/server/actions/public-data';
 import { publishReport, getLatestDealPackUrl } from '@/server/actions/claude';
 import {
@@ -28,11 +28,11 @@ import {
   type SectionDraft,
   type PublishSection,
 } from '@/lib/report-types';
+import { createSavedAction } from '@/lib/saved-action';
 import { SECTIONS } from '@/lib/sections';
 import { fmtMoney } from '@/lib/utils';
 import {
   useDeal,
-  setStageProgress,
   computeFinancials,
   computeGrowthProjection,
   parseSoldMonth,
@@ -55,15 +55,19 @@ import {
   defaultViewingChecklist,
   postViewingBlockers,
   snapshotViewing,
+  withInspection,
 } from '@/lib/viewing';
 import { computeGdv, estimateRent, MIN_COMPS } from '@/lib/comps';
 
-export default function WizardStepPage({ params }: { params: { id: string; step: string } }) {
+export default function WizardStepPage() {
+  const params = useParams<{ id: string; step: string }>();
   const router = useRouter();
   const id = params.id;
   const total = SECTIONS.length;
   const step = Math.max(1, Math.min(total, parseInt(params.step, 10)));
-  const [deal, update, { loading }] = useDeal(id);
+  const [deal, update, { loading, error, saveStatus, flush }] = useDeal(id);
+  const savedAction = useMemo(() => createSavedAction(flush), [flush]);
+  const navigating = useSyncExternalStore(savedAction.subscribe, savedAction.getBusy, savedAction.getBusy);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -87,30 +91,52 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <div className="card p-10 max-w-md text-center">
-          <h2 className="text-xl font-black text-ink mb-3">Deal not found</h2>
-          <p className="text-sm text-ink-mid mb-6">This deal could not be found. It may have been removed, or you may not have access to it.</p>
+          <h2 className="text-xl font-black text-ink mb-3">{error ? 'Could not load this deal' : 'Deal not found'}</h2>
+          <p className="text-sm text-ink-mid mb-6">{error ? 'Check your connection and try again. Your saved deal has not been removed.' : 'This deal could not be found. It may have been removed, or you may not have access to it.'}</p>
+          {error && <button onClick={() => window.location.reload()} className="btn-secondary mb-4">Try again</button>}
           <button onClick={() => router.push('/deal/new')} className="btn-primary mx-auto">Start a new deal</button>
         </div>
       </div>
     );
   }
 
+  const saveAndNavigate = (href: string, prepare?: () => void) =>
+    savedAction.run(() => { router.push(href); }, prepare);
   const goNext = () => {
-    if (step < total) {
-      setStageProgress(id, Math.min(total, step + 1));
-      router.push(`/deal/${id}/wizard/${step + 1}`);
-    } else {
-      updateDealById(id, { delivered: true, progress: total });
-      router.push(`/dashboard`);
-    }
+    void saveAndNavigate(
+      step < total ? `/deal/${id}/wizard/${step + 1}` : '/dashboard',
+      () => update(step < total ? { progress: step + 1 } : { delivered: true, progress: total }),
+    );
   };
-  const goBack = () => {
-    if (step > 1) router.push(`/deal/${id}/wizard/${step - 1}`);
-    else router.push('/deal/new');
+  const goBack = () => { void saveAndNavigate(step > 1 ? `/deal/${id}/wizard/${step - 1}` : '/deal/new'); };
+  const saveBeforeLink = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+    if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+    const href = anchor.getAttribute('href');
+    if (!href || href.startsWith('#')) return;
+    const url = new URL(href, window.location.origin);
+    if (url.origin !== window.location.origin) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void saveAndNavigate(url.pathname + url.search + url.hash);
   };
+  const saveAndSignOut = async () => { await savedAction.run(signOut); };
 
   return (
-    <WizardShell dealId={id} currentStep={step} signOutAction={signOut}>
+    <div onClickCapture={saveBeforeLink}>
+    <fieldset disabled={navigating} aria-busy={navigating} className="min-w-0">
+    <WizardShell dealId={id} address={deal.address} currentStep={step} signOutAction={saveAndSignOut}>
+      <div role={saveStatus === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-lg border p-3 text-sm ${saveStatus === 'error' ? 'border-red-200 bg-red-50' : 'border-black/10 bg-white'}`}>
+        {saveStatus === 'saved' && 'All changes saved.'}
+        {saveStatus === 'pending' && 'Changes waiting to save…'}
+        {saveStatus === 'saving' && 'Saving changes…'}
+        {saveStatus === 'error' && <>
+          <p className="font-bold">Changes have not been saved.</p>
+          <p className="mt-1">Your edits are still on this page. Check your connection and retry before leaving or closing it.</p>
+          <button type="button" onClick={() => { void flush(); }} className="btn-secondary mt-3">Retry save</button>
+        </>}
+      </div>
       {step === 2 && <CriteriaForm deal={deal} update={update} />}
       {step === 3 && <AutoPullPanel deal={deal} update={update} />}
       {step === 4 && <PropertyForm deal={deal} update={update} />}
@@ -123,21 +149,20 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
       {step === 11 && <RefurbPanel deal={deal} update={update} />}
       {step === 12 && <FinancialsPanel deal={deal} update={update} />}
       {step === 13 && <OfferPanel deal={deal} update={update} />}
-      {step === 14 && <GeneratePanel deal={deal} onDone={goNext} />}
+      {step === 14 && <GeneratePanel deal={deal} onDone={goNext} runAfterSave={savedAction.run} />}
       {step === 15 && <DeliverPanel deal={deal} />}
 
-      <div className="mt-8 flex items-center justify-between gap-3">
+      <div className="mt-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <button onClick={goBack} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
-        <div className="flex items-center gap-4">
-          <a
-            href={`/o/${id}`}
-            target="_blank"
-            rel="noopener noreferrer"
+        <div className="flex flex-wrap items-center justify-center gap-4 py-2 sm:py-0">
+          <button
+            type="button"
+            onClick={() => { void saveAndNavigate(`/o/${id}`); }}
             title="Preview the pre-viewing outline pack (your own copy)"
             className="text-xs font-semibold text-ink-muted hover:text-navy inline-flex items-center gap-1.5"
           >
             <ExternalLink size={14} /> Outline preview
-          </a>
+          </button>
           <a
             href={`/deal/${id}/share`}
             title="Create and manage revocable share links to send to investors"
@@ -151,6 +176,8 @@ export default function WizardStepPage({ params }: { params: { id: string; step:
         </button>
       </div>
     </WizardShell>
+    </fieldset>
+    </div>
   );
 }
 
@@ -263,6 +290,8 @@ function AutoPullPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
           </div>
         )}
       </div>
+
+      <DueDiligenceMap deal={deal} />
 
       <div className="card p-6">
         <div className="text-xs font-bold text-ink-mid uppercase tracking-wider mb-3">Area map</div>
@@ -492,7 +521,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
   const searchParams = useSearchParams();
   const urlTab = searchParams.get('tab');
   const initialPhase: ViewingTab =
-    urlTab && (VIEWING_TABS as readonly string[]).includes(urlTab) ? (urlTab as ViewingTab) : (v.phase ?? 'on');
+    urlTab && (VIEWING_TABS as readonly string[]).includes(urlTab) ? (urlTab as ViewingTab) : (v.phase ?? 'inspect');
   const [phase, setPhase] = useState<ViewingTab>(initialPhase);
   const [signName, setSignName] = useState('');
   const [attendee, setAttendee] = useState('');
@@ -526,6 +555,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
       viewing: {
         ...v, checklist: defaultViewingChecklist(), photos: [], notes: '', assessment: '', summary: '',
         outcome: '', signedOffBy: '', signedOffAt: '', roof: '', damp: '', windows: '', heating: '', electrics: '', structure: '',
+        inspection: undefined,
       },
     });
   };
@@ -554,7 +584,7 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
                     {new Date(rec.date).toLocaleDateString('en-GB')}{rec.attendee ? ` · ${rec.attendee}` : ''}
                   </span>
                   <span className="text-ink-muted">
-                    {p.done}/{p.total} photos{rec.outcome ? ` · ${rec.outcome}` : ''}{rec.signedOffBy ? ' · signed off' : ''}
+                    {rec.inspection ? `${inspectionReviewProgress(rec.inspection).reviewed} inspection checks reviewed · ` : ''}{p.done}/{p.total} photos{rec.outcome ? ` · ${rec.outcome}` : ''}{rec.signedOffBy ? ' · signed off' : ''}
                   </span>
                 </div>
               );
@@ -655,11 +685,16 @@ function ViewingPanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
 
       {/* INSPECTION - guided walkthrough (M6) */}
       {phase === 'inspect' && (
+        <>
         <InspectionWalkthrough
           state={v.inspection}
-          onChange={(next: InspectionState) => update({ viewing: { ...v, inspection: next } })}
+          onChange={(next: InspectionState) => update({ viewing: withInspection(v, next) })}
           endOrSemi={endOrSemi}
         />
+        <button type="button" onClick={logViewing} className="btn-secondary inline-flex items-center gap-2">
+          <Plus size={16} /> Log this viewing to history
+        </button>
+        </>
       )}
 
       {/* AFTER - assessment + human sign-off */}
@@ -756,6 +791,7 @@ function DueDiligencePanel({ deal, update }: { deal: Deal; update: UpdateFn }) {
 
   return (
     <div className="space-y-4">
+      <DueDiligenceMap deal={deal} />
       {!pd && (
         <div className="card p-5 bg-amber/5 border-amber/20 flex items-start gap-2">
           <AlertTriangle size={16} className="text-amber mt-0.5" />
@@ -1172,7 +1208,7 @@ function SectionEditor({
   );
 }
 
-function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
+function GeneratePanel({ deal, onDone, runAfterSave }: { deal: Deal; onDone: () => void; runAfterSave: (action: () => Promise<void>) => Promise<boolean> }) {
   const [phase, setPhase] = useState<GenPhase>('idle');
   const [drafts, setDrafts] = useState<ReportStreamState | null>(null);
   const [edited, setEdited] = useState<Record<string, string>>({});
@@ -1181,35 +1217,38 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
   const degraded = drafts ? Object.values(drafts).some((d) => d.degraded) : false;
 
   const start = async () => {
-    setPhase('generating');
     setError(null);
-    setDrafts(null);
-    setEdited({});
     try {
-      const resp = await fetch(`/api/deal/${deal.id}/report-stream`, { method: 'POST' });
-      if (!resp.ok || !resp.body) throw new Error('Generation failed to start.');
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      let last: ReportStreamState | null = null;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop() ?? '';
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const obj = JSON.parse(line) as ReportStreamState | { error: string };
-          if ('error' in obj) throw new Error(obj.error);
-          last = obj;
-          setDrafts({ ...obj });
+      const saved = await runAfterSave(async () => {
+        setPhase('generating');
+        setDrafts(null);
+        setEdited({});
+        const resp = await fetch(`/api/deal/${deal.id}/report-stream`, { method: 'POST' });
+        if (!resp.ok || !resp.body) throw new Error('Generation failed to start.');
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let last: ReportStreamState | null = null;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const obj = JSON.parse(line) as ReportStreamState | { error: string };
+            if ('error' in obj) throw new Error(obj.error);
+            last = obj;
+            setDrafts({ ...obj });
+          }
         }
-      }
-      if (last) {
-        setEdited(Object.fromEntries(SECTION_META.map(({ key }) => [key, last![key].text])));
-      }
-      setPhase('review');
+        if (last) {
+          setEdited(Object.fromEntries(SECTION_META.map(({ key }) => [key, last![key].text])));
+        }
+        setPhase('review');
+      });
+      if (!saved) setError('Save your changes using Retry save above, then generate the report again.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Generation failed. Please retry.');
       setPhase('idle');
@@ -1225,33 +1264,36 @@ function GeneratePanel({ deal, onDone }: { deal: Deal; onDone: () => void }) {
       setError(`Before sending to a client, complete the post-viewing review in Stage 8 (After): needs ${viewingBlockers.join(' and ')}.`);
       return;
     }
-    setPhase('publishing');
     setError(null);
     try {
-      const payload: PublishSection[] = SECTION_META.map(({ key }) => ({
-        section: key,
-        raw: drafts[key].raw,
-        edited: edited[key] ?? drafts[key].text,
-        model: drafts[key].model,
-        promptVersionHash: drafts[key].promptVersionHash,
-        inputTokens: drafts[key].inputTokens,
-        outputTokens: drafts[key].outputTokens,
-        manualDraft: drafts[key].manualDraft,
-      }));
-      const res = await publishReport(deal.id, payload);
-      if (!res.ok) {
-        setError(`Publish failed: ${res.error}`);
-        setPhase('review');
-        return;
-      }
-      if (res.renderError) {
-        // The narratives were saved, but there is no PDF to deliver, so stay on
-        // review with the real reason rather than advancing to an empty delivery.
-        setError(`Report saved, but the PDF render failed: ${res.renderError}. Fix the flagged data and republish.`);
-        setPhase('review');
-        return;
-      }
-      setPhase('published');
+      const saved = await runAfterSave(async () => {
+        setPhase('publishing');
+        const payload: PublishSection[] = SECTION_META.map(({ key }) => ({
+          section: key,
+          raw: drafts[key].raw,
+          edited: edited[key] ?? drafts[key].text,
+          model: drafts[key].model,
+          promptVersionHash: drafts[key].promptVersionHash,
+          inputTokens: drafts[key].inputTokens,
+          outputTokens: drafts[key].outputTokens,
+          manualDraft: drafts[key].manualDraft,
+        }));
+        const res = await publishReport(deal.id, payload);
+        if (!res.ok) {
+          setError(`Publish failed: ${res.error}`);
+          setPhase('review');
+          return;
+        }
+        if (res.renderError) {
+          // The narratives were saved, but there is no PDF to deliver, so stay on
+          // review with the real reason rather than advancing to an empty delivery.
+          setError(`Report saved, but the PDF render failed: ${res.renderError}. Fix the flagged data and republish.`);
+          setPhase('review');
+          return;
+        }
+        setPhase('published');
+      });
+      if (!saved) setError('Save your changes using Retry save above, then publish the report again.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Publish failed. Please retry.');
       setPhase('review');

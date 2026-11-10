@@ -18,8 +18,9 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function OutlineSharePage({ params }: { params: { id: string } }) {
-  const access = await resolveOutlineAccess(params.id);
+export default async function OutlineSharePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const access = await resolveOutlineAccess(id);
   if (access.status === 'not_found') notFound();
   if (access.status === 'revoked' || access.status === 'expired') {
     return (
@@ -39,7 +40,7 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
   // Log the open for tokenised access (best-effort; never blocks the page).
   if (token) {
     try {
-      const h = headers();
+      const h = await headers();
       const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
       await recordShareAccess(token, 'open', { ipHash: hashIp(ip), userAgent: h.get('user-agent') });
     } catch {
@@ -62,7 +63,7 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
       <div className="max-w-2xl mx-auto px-6 py-10">
         <div className="flex items-center justify-between mb-8">
           <Logo size="md" />
-          <a href={`/o/${params.id}/pdf`} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs">
+          <a href={`/o/${id}/pdf`} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs">
             Download PDF
           </a>
         </div>
@@ -88,7 +89,7 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
 
         {/* Recommendation */}
         <div className="rounded-2xl border border-navy/30 p-5 mb-8">
-          <div className="text-[11px] font-bold text-navy uppercase tracking-wide mb-1">Our recommendation</div>
+          <div className="text-[11px] font-bold text-navy uppercase tracking-wide mb-1">Initial assessment</div>
           <p className="text-lg text-ink leading-relaxed">{o.recommendation}</p>
         </div>
 
@@ -125,12 +126,16 @@ export default async function OutlineSharePage({ params }: { params: { id: strin
         {/* Why it fits */}
         {o.fitApplicable > 0 && (
           <div className="mb-8">
-            <h2 className="text-base font-black text-ink mb-3">Why this fits your criteria ({o.fitMet} of {o.fitApplicable})</h2>
+            <h2 className="text-base font-black text-ink mb-3">Criteria comparison ({o.fitMet} of {o.fitApplicable} match)</h2>
+            <p className="text-xs text-ink-muted mb-3">Only checks with enough entered information are counted. Missing inputs are not a match.</p>
             <ul className="space-y-1.5">
               {o.matched.map((m, i) => (
                 <li key={i} className="text-sm text-ink-mid flex items-start gap-2">
                   <span className="text-success font-bold">✓</span> {m}
                 </li>
+              ))}
+              {o.unmatched.map((m, i) => (
+                <li key={`unmet-${i}`} className="text-sm text-ink-mid">Needs review: {m}</li>
               ))}
             </ul>
           </div>

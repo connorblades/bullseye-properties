@@ -2,6 +2,21 @@
 
 import { redirect } from 'next/navigation';
 import { createSupabaseActionClient } from '@/server/auth/server';
+import { authConfigured, AUTH_UNAVAILABLE } from '@/server/auth/config';
+
+function requireAccountConnection() {
+  if (!authConfigured()) redirect(`/login?error=${encodeURIComponent(AUTH_UNAVAILABLE)}`);
+}
+
+// Catch provider/transport failures only. Next's redirect is control flow and
+// must remain outside the try/catch so successful redirects are not swallowed.
+async function attemptAuth<T>(operation: (client: Awaited<ReturnType<typeof createSupabaseActionClient>>) => Promise<T>): Promise<T | null> {
+  try {
+    return await operation(await createSupabaseActionClient());
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Server Action: sign in with Google OAuth.
@@ -14,10 +29,10 @@ import { createSupabaseActionClient } from '@/server/auth/server';
  * sign-in path — one click, no password required, no email round-trip.
  */
 export async function signInWithGoogle() {
+  requireAccountConnection();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
-  const supabase = createSupabaseActionClient();
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  const result = await attemptAuth((supabase) => supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo: `${siteUrl}/auth/callback`,
@@ -26,13 +41,13 @@ export async function signInWithGoogle() {
         prompt: 'consent',
       },
     },
-  });
+  }));
 
-  if (error || !data?.url) {
+  if (!result || result.error || !result.data?.url) {
     redirect(`/login?error=${encodeURIComponent('Google sign-in is unavailable right now.')}`);
   }
 
-  redirect(data.url);
+  redirect(result.data.url);
 }
 
 /**
@@ -47,6 +62,7 @@ export async function signInWithGoogle() {
  * right host. NEXT_PUBLIC_SITE_URL is used here for the redirectTo parameter.
  */
 export async function signInWithMagicLink(formData: FormData) {
+  requireAccountConnection();
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
 
   if (!email || !email.includes('@')) {
@@ -54,19 +70,18 @@ export async function signInWithMagicLink(formData: FormData) {
     redirect(`/login?error=${msg}`);
   }
 
-  const supabase = createSupabaseActionClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
-  const { error } = await supabase.auth.signInWithOtp({
+  const result = await attemptAuth((supabase) => supabase.auth.signInWithOtp({
     email,
     options: {
       emailRedirectTo: `${siteUrl}/auth/callback`,
       // Do not auto-create user accounts. Only existing partners can sign in.
       shouldCreateUser: false,
     },
-  });
+  }));
 
-  if (error) {
+  if (!result || result.error) {
     // Common: "Email not allowed" when shouldCreateUser is false and the
     // email doesn't match a known user. Don't leak which - generic message.
     const msg = encodeURIComponent(
@@ -89,6 +104,7 @@ export async function signInWithMagicLink(formData: FormData) {
  * which sees a leftover session from a prior magic-link sign-in).
  */
 export async function signInWithPassword(formData: FormData) {
+  requireAccountConnection();
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
   const password = String(formData.get('password') ?? '');
 
@@ -99,15 +115,17 @@ export async function signInWithPassword(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent('Enter your password.')}`);
   }
 
-  const supabase = createSupabaseActionClient();
+  const result = await attemptAuth(async (supabase) => {
+    // Scope the clear to this browser, not every device the user is using.
+    const cleared = await supabase.auth.signOut({ scope: 'local' });
+    if (cleared.error) return { error: cleared.error };
+    return supabase.auth.signInWithPassword({ email, password });
+  });
 
-  // Clear any existing session so a wrong-password attempt actually fails
-  // closed rather than silently keeping the user signed in via the prior cookie.
-  await supabase.auth.signOut();
-
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
+  if (!result) {
+    redirect(`/login?error=${encodeURIComponent('Sign-in is unavailable right now. Please try again.')}`);
+  }
+  if (result.error) {
     // Generic message: don't leak whether the email exists.
     redirect(`/login?error=${encodeURIComponent('Incorrect email or password.')}`);
   }
@@ -122,6 +140,7 @@ export async function signInWithPassword(formData: FormData) {
  * after their first magic-link sign-in. Requires an active session.
  */
 export async function setPassword(formData: FormData) {
+  requireAccountConnection();
   const password = String(formData.get('password') ?? '');
   const confirm = String(formData.get('confirm') ?? '');
 
@@ -132,11 +151,10 @@ export async function setPassword(formData: FormData) {
     redirect(`/account/password?error=${encodeURIComponent('Passwords do not match.')}`);
   }
 
-  const supabase = createSupabaseActionClient();
-  const { error } = await supabase.auth.updateUser({ password });
+  const result = await attemptAuth((supabase) => supabase.auth.updateUser({ password }));
 
-  if (error) {
-    redirect(`/account/password?error=${encodeURIComponent(error.message)}`);
+  if (!result || result.error) {
+    redirect(`/account/password?error=${encodeURIComponent('Your password could not be changed. Check that you are signed in and try again.')}`);
   }
 
   redirect('/dashboard?password_set=1');
@@ -149,9 +167,11 @@ export async function setPassword(formData: FormData) {
  * just bounce to /login without a real session call.
  */
 export async function signOut() {
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    const supabase = createSupabaseActionClient();
-    await supabase.auth.signOut();
+  if (authConfigured()) {
+    const result = await attemptAuth((supabase) => supabase.auth.signOut({ scope: 'local' }));
+    if (!result || result.error) {
+      redirect(`/login?error=${encodeURIComponent('Sign-out could not be completed. Please try again.')}`);
+    }
   }
   redirect('/login');
 }

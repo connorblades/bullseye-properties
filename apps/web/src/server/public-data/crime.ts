@@ -17,6 +17,7 @@
 import type { CrimeStats } from '@/lib/deal-store';
 import type { GeoCollection } from './geojson';
 import { cached, TTL } from './cache';
+import { searchRing, validMapCentre } from '@/lib/dd-map';
 import { fetchJson, failSoft } from './http';
 
 const DATES_URL = 'https://data.police.uk/api/crimes-street-dates';
@@ -44,10 +45,8 @@ async function recentMonths(n: number): Promise<string[]> {
 
 /**
  * Individual crime locations for the latest available month, as GeoJSON points,
- * to feed the interactive heat map. Uses the police `poly` query over a ~6km box
- * (not the ~1-mile point radius) so the heat map shows the property against its
- * surrounding areas, not a single central cluster. The box stays well under the
- * API's 10k-result cap. One API call. Cached 24h. Fail-soft.
+ * to feed the interactive heat map. Uses the same 64-sided search ring as the map. Dense areas can exceed the
+ * Police API 10k-result cap; this returns unavailable rather than zero crimes. One API call. Cached 24h. Fail-soft.
  */
 export async function fetchCrimePoints(
   lat: number,
@@ -58,26 +57,26 @@ export async function fetchCrimePoints(
     const months = await recentMonths(1);
     if (months.length === 0) throw new Error('no crime months available');
     const month = months[0];
-    const key = `crimePoints:${lat.toFixed(3)},${lng.toFixed(3)}:${radiusKm}:${month}`;
+    const key = `crimePoints:v3:${lat},${lng}:${radiusKm}:${month}`;
     return cached(key, 'crime', TTL.day, () =>
       failSoft('crime-points-fetch', async () => {
-        const halfLat = radiusKm / 111;
-        const halfLng = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
-        const n = lat + halfLat, s = lat - halfLat, e = lng + halfLng, w = lng - halfLng;
-        const poly = `${n},${w}:${n},${e}:${s},${e}:${s},${w}`;
+        const poly = searchRing(lat, lng, radiusKm).slice(0, -1)
+          .map(([x, y]) => `${y.toFixed(6)},${x.toFixed(6)}`).join(':');
         const url = `${CRIME_URL}?poly=${encodeURIComponent(poly)}&date=${month}`;
         const records = await fetchJson<CrimeRecordWithLoc[]>(url);
         return {
           type: 'FeatureCollection',
+          period: month,
+          retrievedAt: new Date().toISOString(),
           features: records
-            .filter((r) => r.location)
+            .filter((r) => r.location && validMapCentre(Number(r.location.latitude), Number(r.location.longitude)))
             .map((r) => ({
               type: 'Feature' as const,
               geometry: {
                 type: 'Point',
                 coordinates: [parseFloat(r.location!.longitude), parseFloat(r.location!.latitude)],
               },
-              properties: { category: r.category },
+              properties: { category: humanizeCategory(r.category), month },
             })),
         } satisfies GeoCollection;
       }),
