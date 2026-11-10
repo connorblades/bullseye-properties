@@ -58,8 +58,10 @@ export function RiskMap({ lat, lng, amenities, fetchedAt }: {
       try {
         const ml = await import('maplibre-gl');
         if (cancelled || !containerRef.current) return;
+        // v6 ships a separate worker. Let Next emit a same-origin hashed asset.
+        ml.setWorkerUrl(new URL('maplibre-gl/dist/maplibre-gl-worker.mjs', import.meta.url).toString());
         map = new ml.Map({ container: containerRef.current, style: base === 'os' ? OS_STYLE : OSM_STYLE,
-          center: [lng, lat], zoom: 13, cooperativeGestures: true });
+          center: [lng, lat], zoom: 13, cooperativeGestures: true, attributionControl: { compact: false } });
         mapRef.current = map;
         map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-right');
         map.addControl(new ml.ScaleControl({ unit: 'metric' }), 'bottom-left');
