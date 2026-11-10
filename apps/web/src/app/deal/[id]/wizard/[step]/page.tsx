@@ -152,9 +152,9 @@ export default function WizardStepPage() {
       {step === 14 && <GeneratePanel deal={deal} onDone={goNext} runAfterSave={savedAction.run} />}
       {step === 15 && <DeliverPanel deal={deal} />}
 
-      <div className="mt-8 flex items-center justify-between gap-3">
+      <div className="mt-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <button onClick={goBack} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-4 py-2 sm:py-0">
           <button
             type="button"
             onClick={() => { void saveAndNavigate(`/o/${id}`); }}

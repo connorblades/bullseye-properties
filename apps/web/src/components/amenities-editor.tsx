@@ -60,7 +60,7 @@ export function AmenitiesEditor({
         <div className="text-xs text-ink-muted">
           Radius pull from public sources. Production source: OpenStreetMap Overpass API + OSRM routing for travel times.
         </div>
-        <div className="flex gap-1 bg-bg rounded-lg p-1">
+        <div className="flex flex-wrap gap-1 bg-bg rounded-lg p-1">
           {(['walk', 'drive', 'transit'] as const).map((m) => {
             const Icon = MODE_ICON[m];
             const count = m === 'walk' ? walk.length : m === 'drive' ? drive.length : transit.length;
